@@ -41,6 +41,15 @@ public class TelegramSessionRepository : ITelegramSessionRepository
             .UpdateAsync(cancellationToken);
     }
 
+    public async Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken)
+    {
+        var entities = await _db.TelegramSessions
+            .Where(s => s.UserId == userId && s.IsActive)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToData).ToList();
+    }
+
     private static TelegramSessionData MapToData(TelegramSessionEntity entity)
     {
         var now = DateTime.UtcNow;

@@ -7,4 +7,5 @@ public interface ITelegramSessionRepository
     Task<TelegramSessionData?> GetActiveSessionAsync(string userId, string sessionId, CancellationToken cancellationToken);
     Task<TelegramSessionData> SaveSessionAsync(TelegramSessionData session, CancellationToken cancellationToken);
     Task UpdateSessionStatusAsync(string userId, string sessionId, bool isActive, CancellationToken cancellationToken);
+    Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken);
 } 

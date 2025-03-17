@@ -349,6 +349,20 @@ public class TelegramSessionService : ITelegramSessionService
         };
     }
 
+    public async Task<List<TelegramContactResponse>> GetContactsAsync(string userId, string sessionId, CancellationToken cancellationToken)
+    {
+        var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+        if (session == null)
+            throw new Exception("Session expired");
+
+        return await session.GetContactsAsync();
+    }
+
+    public async Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken)
+    {
+        return await _sessionRepository.GetActiveSessionsAsync(userId, cancellationToken);
+    }
+
     private string GetCacheKey(string userId, string sessionId) => $"{userId}_{sessionId}";
 
     private async Task<TelegramLoginStatus> HandleLoginResponseAsync(TelegramSession session, string loginResponse)

@@ -11,19 +11,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="45ce4c25-dbd1-4c3e-ac30-531026f2e8ad" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Hubs/TelegramHub.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Models/Telegram/LoginRequest.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Models/Telegram/SessionResponse.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Models/Telegram/TwoFactorRequest.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Models/Telegram/VerificationCodeRequest.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Enums/Telegram/TelegramLoginStatus.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/TalkLens.Collector.sln" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/migrations/postgres/20240313000000_create_messenger_sessions.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionRepository.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Repositories/TelegramSessionRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Repositories/TelegramSessionRepository.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -144,7 +138,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1741903751809</updated>
-      <workItem from="1741903754261" duration="45116000" />
+      <workItem from="1741903754261" duration="49279000" />
     </task>
     <servers />
   </component>
@@ -161,68 +155,42 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
           <url>file://$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs</url>
-          <line>56</line>
+          <line>57</line>
           <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Api\Controllers\TelegramSessionController.cs" containingFunctionPresentation="Method 'SubmitVerificationCodeAsync'">
             <startOffsets>
-              <option value="1803" />
+              <option value="1852" />
             </startOffsets>
             <endOffsets>
-              <option value="2023" />
+              <option value="2072" />
             </endOffsets>
           </properties>
           <option name="timeStamp" value="32" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
           <url>file://$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs</url>
-          <line>50</line>
+          <line>51</line>
           <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Api\Controllers\TelegramSessionController.cs" containingFunctionPresentation="Method 'SubmitVerificationCodeAsync'">
             <startOffsets>
-              <option value="1613" />
+              <option value="1662" />
             </startOffsets>
             <endOffsets>
-              <option value="1793" />
+              <option value="1842" />
             </endOffsets>
           </properties>
           <option name="timeStamp" value="37" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
           <url>file://$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs</url>
-          <line>49</line>
+          <line>22</line>
           <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Infrastructure\Services\TelegramSessionService.cs" containingFunctionPresentation="Method 'GetOrRestoreSessionAsync'">
             <startOffsets>
-              <option value="2039" />
+              <option value="890" />
             </startOffsets>
             <endOffsets>
-              <option value="2101" />
+              <option value="936" />
             </endOffsets>
           </properties>
-          <option name="timeStamp" value="48" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs</url>
-          <line>41</line>
-          <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Infrastructure\Services\TelegramSessionService.cs" containingFunctionPresentation="Method 'GetOrRestoreSessionAsync'">
-            <startOffsets>
-              <option value="1704" />
-            </startOffsets>
-            <endOffsets>
-              <option value="1775" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="49" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs</url>
-          <line>54</line>
-          <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Infrastructure\Services\TelegramSessionService.cs" containingFunctionPresentation="Method 'GetOrRestoreSessionAsync'">
-            <startOffsets>
-              <option value="2233" />
-            </startOffsets>
-            <endOffsets>
-              <option value="2289" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="50" />
+          <option name="timeStamp" value="51" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

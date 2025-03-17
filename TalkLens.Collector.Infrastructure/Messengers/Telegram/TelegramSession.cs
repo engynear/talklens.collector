@@ -2,6 +2,7 @@ using TalkLens.Collector.Domain.Enums.Telegram;
 using WTelegram;
 using TL;
 using System.IO;
+using TalkLens.Collector.Domain.Models.Telegram;
 
 namespace TalkLens.Collector.Infrastructure.Messengers.Telegram;
 
@@ -223,6 +224,44 @@ public class TelegramSession : IDisposable
         catch
         {
             return false;
+        }
+    }
+
+    public async Task<List<TelegramContactResponse>> GetContactsAsync()
+    {
+        ThrowIfDisposed();
+        
+        try
+        {
+            var dialogs = await _client.Messages_GetAllDialogs();
+            var contacts = new List<TelegramContactResponse>();
+            
+            foreach (var dialog in dialogs.dialogs)
+            {
+                // Пропускаем все, кроме личных чатов
+                if (dialog.Peer is not TL.PeerUser)
+                    continue;
+
+                var userId = ((TL.PeerUser)dialog.Peer).user_id;
+                var user = dialogs.users[userId];
+                
+                // Пропускаем ботов и удаленных пользователей
+                if (user.flags.HasFlag(TL.User.Flags.bot) || user.flags.HasFlag(TL.User.Flags.deleted))
+                    continue;
+
+                contacts.Add(new TelegramContactResponse
+                {
+                    Id = userId,
+                    FirstName = user.first_name ?? string.Empty,
+                    LastName = user.last_name
+                });
+            }
+
+            return contacts;
+        }
+        catch (RpcException ex)
+        {
+            throw new Exception($"Telegram error: {ex.Message}");
         }
     }
 }

@@ -27,4 +27,13 @@ public interface ITelegramSessionService
         string userId,
         string sessionId, 
         CancellationToken cancellationToken);
+
+    Task<List<TelegramContactResponse>> GetContactsAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken);
+
+    Task<List<TelegramSessionData>> GetActiveSessionsAsync(
+        string userId,
+        CancellationToken cancellationToken);
 }

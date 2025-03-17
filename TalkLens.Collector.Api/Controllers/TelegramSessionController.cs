@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using TalkLens.Collector.Api.Models.Telegram;
 using TalkLens.Collector.Domain.Interfaces;
+using TalkLens.Collector.Domain.Models.Telegram;
 
 namespace TalkLens.Collector.Api.Controllers;
 
@@ -108,5 +109,26 @@ public class TelegramSessionController : BaseApiController
             PhoneNumber = result.PhoneNumber,
             Error = result.Error
         });
+    }
+
+    /// <summary>
+    /// Получает список активных сессий пользователя
+    /// </summary>
+    [HttpGet("sessions")]
+    public async Task<ActionResult<List<SessionResponse>>> GetActiveSessionsAsync(
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var sessions = await _telegramSessionService.GetActiveSessionsAsync(userId, cancellationToken);
+        
+        var response = sessions.Select(s => new SessionResponse
+        {
+            SessionId = s.SessionId,
+            Status = "Success",
+            PhoneNumber = s.PhoneNumber,
+            Error = null
+        }).ToList();
+        
+        return Ok(response);
     }
 } 
