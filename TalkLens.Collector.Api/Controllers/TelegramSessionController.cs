@@ -1,0 +1,112 @@
+using Microsoft.AspNetCore.Mvc;
+using TalkLens.Collector.Api.Models.Telegram;
+using TalkLens.Collector.Domain.Interfaces;
+
+namespace TalkLens.Collector.Api.Controllers;
+
+[Route("auth/telegram")]
+[ApiController]
+public class TelegramSessionController : BaseApiController
+{
+    private readonly ITelegramSessionService _telegramSessionService;
+
+    public TelegramSessionController(ITelegramSessionService telegramSessionService)
+    {
+        _telegramSessionService = telegramSessionService;
+    }
+
+    /// <summary>
+    /// Начинает процесс авторизации в Telegram с помощью номера телефона
+    /// </summary>
+    [HttpPost("login")]
+    public async Task<ActionResult<SessionResponse>> LoginAsync(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var result = await _telegramSessionService.LoginWithPhoneAsync(
+            userId,
+            request.SessionId,
+            request.Phone,
+            cancellationToken);
+
+        return Ok(new SessionResponse
+        {
+            SessionId = request.SessionId,
+            Status = result.Status.ToString(),
+            PhoneNumber = result.PhoneNumber,
+            Error = result.Error
+        });
+    }
+
+    /// <summary>
+    /// Отправляет код верификации для подтверждения номера телефона
+    /// </summary>
+    [HttpPost("verification-code")]
+    public async Task<ActionResult<SessionResponse>> SubmitVerificationCodeAsync(
+        [FromBody] VerificationCodeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var result = await _telegramSessionService.SubmitVerificationCodeAsync(
+            userId,
+            request.SessionId,
+            request.Code,
+            cancellationToken);
+
+        return Ok(new SessionResponse
+        {
+            SessionId = request.SessionId,
+            Status = result.Status.ToString(),
+            PhoneNumber = result.PhoneNumber,
+            Error = result.Error
+        });
+    }
+
+    /// <summary>
+    /// Отправляет пароль двухфакторной аутентификации
+    /// </summary>
+    [HttpPost("two-factor")]
+    public async Task<ActionResult<SessionResponse>> SubmitTwoFactorPasswordAsync(
+        [FromBody] TwoFactorRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var result = await _telegramSessionService.SubmitTwoFactorPasswordAsync(
+            userId,
+            request.SessionId,
+            request.Password,
+            cancellationToken);
+
+        return Ok(new SessionResponse
+        {
+            SessionId = request.SessionId,
+            Status = result.Status.ToString(),
+            PhoneNumber = result.PhoneNumber,
+            Error = result.Error
+        });
+    }
+
+    /// <summary>
+    /// Получает текущий статус сессии
+    /// </summary>
+    [HttpGet("status/{sessionId}")]
+    public async Task<ActionResult<SessionResponse>> GetSessionStatusAsync(
+        [FromRoute] string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var result = await _telegramSessionService.GetSessionStatusAsync(
+            userId,
+            sessionId,
+            cancellationToken);
+
+        return Ok(new SessionResponse
+        {
+            SessionId = sessionId,
+            Status = result.Status.ToString(),
+            PhoneNumber = result.PhoneNumber,
+            Error = result.Error
+        });
+    }
+} 
