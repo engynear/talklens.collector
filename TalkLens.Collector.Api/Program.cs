@@ -61,6 +61,11 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITelegramSessionService, TelegramSessionService>();
 builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
 
+// Регистрируем сервисы
+builder.Services.AddSingleton<TelegramMessageCollectorService>();
+builder.Services.AddSingleton<TelegramSubscriptionManager>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramMessageCollectorService>());
+
 var app = builder.Build();
 
 app.UseSwagger();

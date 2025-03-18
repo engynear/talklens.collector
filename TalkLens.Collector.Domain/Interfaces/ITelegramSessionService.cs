@@ -36,4 +36,21 @@ public interface ITelegramSessionService
     Task<List<TelegramSessionData>> GetActiveSessionsAsync(
         string userId,
         CancellationToken cancellationToken);
+
+    Task SubscribeToUpdatesAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
+
+    Task UnsubscribeFromUpdatesAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
+
+    Task<List<TelegramContactResponse>> GetSubscribedContactsAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken);
 }

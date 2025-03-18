@@ -11,12 +11,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="45ce4c25-dbd1-4c3e-ac30-531026f2e8ad" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.TalkLens.Collector/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.TalkLens.Collector/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_3b405244-756a-4f21-8105-d2dc07140057.session" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_46adfc9f-122a-4936-a82c-a937cbf4edfa.session" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_802103b6-2e01-46e2-bfc9-a4397d3c1715.session" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_c9fd495d-f654-47fb-8dc5-91cf2e626e04.session" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_f8cf4acc-721a-40ca-8faf-656b3b6bc135.session" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionRepository.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Program.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Repositories/TelegramSessionRepository.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Repositories/TelegramSessionRepository.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -24,21 +29,27 @@
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
+  <component name="DpaMonitoringSettings">
+    <option name="autoShow" value="false" />
+  </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$USER_HOME$/AppData/Local/Symbols/src/dotnet/aspnetcore/25ef4aa38b77974263cb10f6e9cbd10135f17b59/src/Mvc/Mvc.Core/src/ControllerBase.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$USER_HOME$/AppData/Local/Symbols/src/dotnet/aspnetcore/25ef4aa38b77974263cb10f6e9cbd10135f17b59/src/Mvc/Mvc.Core/src/Infrastructure/ActionMethodExecutor.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/0d4454fc58104eab9b296be6ae32b23e9920/5d/92f9bd26/SignalRDependencyInjectionExtensions.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/2832e8c2b81f4641b3863f406ce3a519c90938/57/eb63be77/Enum.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/661ff8abb7914840bcc3811aac21ac86446000/5e/8fe2653b/DataConnectionExtensions.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/dbd7e9da42e04d838c57abd2cfa70f4c18928/18/f1aaf9ed/ClaimsPrincipal.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/82cfadf8d3e486c7efff04da1ccb64fa7cd989fc5c31e38bdba76828116c0e3/UpdateManager.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/cd6a29407e39a7e5efc1635852cf745d6afb62e39e4423fa1e4b45c5e98147b/Client.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/ff4fec87d3ea234d6619c817e8ef2cd9d18b1122affdd7b46f33b7b236252/Client.cs" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="MetaFilesCheckinStateConfiguration" checkMetaFiles="true" />
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 2
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 2
+}</component>
   <component name="ProjectId" id="2uHRwBEihls7kWvysbvLLlsfqBd" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
@@ -138,7 +149,8 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1741903751809</updated>
-      <workItem from="1741903754261" duration="49279000" />
+      <workItem from="1741903754261" duration="58043000" />
+      <workItem from="1742201972194" duration="15510000" />
     </task>
     <servers />
   </component>
@@ -180,17 +192,30 @@
           <option name="timeStamp" value="37" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs</url>
-          <line>22</line>
-          <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Infrastructure\Services\TelegramSessionService.cs" containingFunctionPresentation="Method 'GetOrRestoreSessionAsync'">
+          <url>file://$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramController.cs</url>
+          <line>28</line>
+          <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Api\Controllers\TelegramController.cs" containingFunctionPresentation="Method 'GetContacts'">
             <startOffsets>
-              <option value="890" />
+              <option value="942" />
             </startOffsets>
             <endOffsets>
-              <option value="936" />
+              <option value="962" />
             </endOffsets>
           </properties>
-          <option name="timeStamp" value="51" />
+          <option name="timeStamp" value="57" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DotNet Breakpoints">
+          <url>file://$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramController.cs</url>
+          <line>21</line>
+          <properties documentPath="C:\Users\engyn\code\TalkLens\TalkLens.Collector\TalkLens.Collector.Api\Controllers\TelegramController.cs" containingFunctionPresentation="Method 'GetContacts'">
+            <startOffsets>
+              <option value="698" />
+            </startOffsets>
+            <endOffsets>
+              <option value="723" />
+            </endOffsets>
+          </properties>
+          <option name="timeStamp" value="58" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

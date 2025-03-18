@@ -15,14 +15,51 @@ public class TelegramSession : IDisposable
     private TelegramLoginStatus _status;
     private bool _disposed;
     private User? _user;
+    private UpdateManager? _updateManager;
     
     private string? _phone = null;
     private string? _verificationCode = null;
     private string? _twoFactorPassword = null;
+    private EventHandler<IObject>? _updateHandler;
 
     public TelegramLoginStatus Status => _status;
     public string? PhoneNumber => _phone;
     private string SessionFilePath => $"{_userId}_{_sessionId}.session";
+    private string UpdateStatePath => $"{_userId}_{_sessionId}.updates";
+
+    public void SubscribeToUpdates(EventHandler<IObject> handler)
+    {
+        UnsubscribeFromUpdates();
+        _updateHandler = handler;
+        
+        _updateManager = _client.WithUpdateManager(
+            onUpdate: update => 
+            {
+                if (_updateHandler != null)
+                {
+                    _updateHandler.Invoke(this, update);
+                }
+                return Task.CompletedTask;
+            },
+            statePath: UpdateStatePath
+        );
+    }
+
+    public void UnsubscribeFromUpdates()
+    {
+        if (_updateManager != null)
+        {
+            // UpdateManager не имеет метода Dispose, просто обнуляем ссылку
+            // чтобы позволить GC собрать объект
+            _updateManager = null;
+        }
+        _updateHandler = null;
+    }
+
+    public long GetUserId()
+    {
+        return _user?.id ?? 0;
+    }
 
     public TelegramSession(string userId, string sessionId)
     {
@@ -184,6 +221,21 @@ public class TelegramSession : IDisposable
         }
     }
 
+    private void DeleteUpdateStateFile()
+    {
+        if (File.Exists(UpdateStatePath))
+        {
+            try
+            {
+                File.Delete(UpdateStatePath);
+            }
+            catch
+            {
+                // Игнорируем ошибки при удалении файла
+            }
+        }
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)
@@ -199,6 +251,7 @@ public class TelegramSession : IDisposable
 
         try
         {
+            UnsubscribeFromUpdates();
             _client?.Dispose();
         }
         catch
@@ -209,6 +262,7 @@ public class TelegramSession : IDisposable
         if (_status != TelegramLoginStatus.Success)
         {
             DeleteSessionFile();
+            DeleteUpdateStateFile();
         }
 
         _disposed = true;

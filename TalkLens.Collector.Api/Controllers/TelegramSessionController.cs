@@ -131,4 +131,45 @@ public class TelegramSessionController : BaseApiController
         
         return Ok(response);
     }
+
+    /// <summary>
+    /// Подписывается на обновления сообщений для указанной сессии и собеседника
+    /// </summary>
+    [HttpPost("sessions/{sessionId}/interlocutors/{interlocutorId}/subscribe")]
+    public async Task<ActionResult> SubscribeToUpdatesAsync(
+        [FromRoute] string sessionId,
+        [FromRoute] long interlocutorId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        await _telegramSessionService.SubscribeToUpdatesAsync(userId, sessionId, interlocutorId, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Отписывается от обновлений сообщений для указанной сессии и собеседника
+    /// </summary>
+    [HttpPost("sessions/{sessionId}/interlocutors/{interlocutorId}/unsubscribe")]
+    public async Task<ActionResult> UnsubscribeFromUpdatesAsync(
+        [FromRoute] string sessionId,
+        [FromRoute] long interlocutorId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        await _telegramSessionService.UnsubscribeFromUpdatesAsync(userId, sessionId, interlocutorId, cancellationToken);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Получает список контактов, на которые оформлена подписка на обновления
+    /// </summary>
+    [HttpGet("sessions/{sessionId}/subscribed")]
+    public async Task<ActionResult<List<TelegramContactResponse>>> GetSubscribedContactsAsync(
+        [FromRoute] string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var contacts = await _telegramSessionService.GetSubscribedContactsAsync(userId, sessionId, cancellationToken);
+        return Ok(contacts);
+    }
 } 
