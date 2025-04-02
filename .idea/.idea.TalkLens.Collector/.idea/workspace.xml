@@ -10,20 +10,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="45ce4c25-dbd1-4c3e-ac30-531026f2e8ad" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.TalkLens.Collector/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.TalkLens.Collector/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_1706949f-f132-4ca0-baf4-baba67e977af.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_3b405244-756a-4f21-8105-d2dc07140057.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_46adfc9f-122a-4936-a82c-a937cbf4edfa.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_802103b6-2e01-46e2-bfc9-a4397d3c1715.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_c9fd495d-f654-47fb-8dc5-91cf2e626e04.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/7f281508-602e-4576-95b4-d9f91f7eff3b_f8cf4acc-721a-40ca-8faf-656b3b6bc135.session" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Controllers/TelegramSessionController.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Api/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Api/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Domain/Interfaces/ITelegramSessionService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Messengers/Telegram/TelegramSession.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/TalkLens.Collector.Infrastructure/Services/TelegramSessionService.cs" afterDir="false" />
-    </list>
+    <list default="true" id="45ce4c25-dbd1-4c3e-ac30-531026f2e8ad" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -60,7 +47,7 @@
   "keyToString": {
     ".NET Project.TalkLens.Collector.Api.executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
+    "git-widget-placeholder": "main",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -151,6 +138,7 @@
       <updated>1741903751809</updated>
       <workItem from="1741903754261" duration="58043000" />
       <workItem from="1742201972194" duration="15510000" />
+      <workItem from="1742304843662" duration="2522000" />
     </task>
     <servers />
   </component>
