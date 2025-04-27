@@ -37,6 +37,16 @@ public class TelegramSession : IDisposable
     public TelegramLoginStatus Status => _status;
     public string? PhoneNumber => _phone;
 
+    /// <summary>
+    /// Возвращает путь к файлу сессии
+    /// </summary>
+    public string GetSessionFilePath() => _sessionFilePath;
+
+    /// <summary>
+    /// Возвращает путь к файлу состояния обновлений
+    /// </summary>
+    public string GetUpdatesFilePath() => _updatesFilePath;
+
     public void SubscribeToUpdates(EventHandler<IObject> handler)
     {
         UnsubscribeFromUpdates();
@@ -52,6 +62,28 @@ public class TelegramSession : IDisposable
                 return Task.CompletedTask;
             },
             statePath: _updatesFilePath
+        );
+    }
+
+    /// <summary>
+    /// Подписывается на обновления без использования файла состояния
+    /// </summary>
+    /// <param name="handler">Обработчик обновлений</param>
+    public void SubscribeToUpdatesWithoutState(EventHandler<IObject> handler)
+    {
+        UnsubscribeFromUpdates();
+        _updateHandler = handler;
+        
+        // Создаем UpdateManager без указания пути к файлу состояния
+        _updateManager = _client.WithUpdateManager(
+            onUpdate: update => 
+            {
+                if (_updateHandler != null)
+                {
+                    _updateHandler.Invoke(this, update);
+                }
+                return Task.CompletedTask;
+            }
         );
     }
 
@@ -486,24 +518,5 @@ public class TelegramSession : IDisposable
     {
         public TelegramContactResponse Contact { get; set; }
         public DateTime LastMessageTime { get; set; }
-    }
-
-    /// <summary>
-    /// Получает путь к файлу сессии
-    /// </summary>
-    public string GetSessionFilePath() => _sessionFilePath;
-    
-    /// <summary>
-    /// Получает путь к файлу состояния обновлений
-    /// </summary>
-    public string GetUpdatesFilePath() => _updatesFilePath;
-    
-    /// <summary>
-    /// Освобождает ресурсы клиента Telegram
-    /// Метод для обратной совместимости, вызывает Dispose()
-    /// </summary>
-    public void ReleaseClient()
-    {
-        Dispose();
     }
 }

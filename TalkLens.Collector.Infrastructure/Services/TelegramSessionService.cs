@@ -13,101 +13,62 @@ namespace TalkLens.Collector.Infrastructure.Services;
 
 public class TelegramSessionService : ITelegramSessionService
 {
-    private readonly IMemoryCache _cache;
+    private readonly RedisTelegramSessionCache _redisCache;
     private readonly ITelegramSessionRepository _sessionRepository;
-    private readonly TelegramMessageCollectorService _messageCollector;
-    private readonly TelegramSubscriptionManager _subscriptionManager;
+    private readonly ITelegramSubscriptionRepository _subscriptionRepository;
     private readonly TelegramSessionManager _sessionManager;
     private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(3);
-    // Ключ: "{userId}_{sessionId}_{interlocutorId}"
-    private readonly ConcurrentDictionary<string, bool> _activeSubscriptions = new();
-
-    private static string GetSubscriptionKey(string userId, string sessionId, long interlocutorId) 
-        => $"{userId}_{sessionId}_{interlocutorId}";
 
     public TelegramSessionService(
-        IMemoryCache cache, 
+        RedisTelegramSessionCache redisCache, 
         ITelegramSessionRepository sessionRepository,
-        TelegramMessageCollectorService messageCollector,
-        TelegramSubscriptionManager subscriptionManager,
+        ITelegramSubscriptionRepository subscriptionRepository,
         TelegramSessionManager sessionManager)
     {
-        _cache = cache;
+        _redisCache = redisCache;
         _sessionRepository = sessionRepository;
-        _messageCollector = messageCollector;
-        _subscriptionManager = subscriptionManager;
+        _subscriptionRepository = subscriptionRepository;
         _sessionManager = sessionManager;
     }
 
     private async Task<TelegramSession?> GetOrRestoreSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
     {
-        var cacheKey = GetCacheKey(userId, sessionId);
         Console.WriteLine($"[DEBUG] Trying to restore session. UserId: {userId}, SessionId: {sessionId}");
         
-        // Проверяем глобальный кэш
-        var globalSession = TelegramClientCache.GetSession(userId, sessionId);
-        Console.WriteLine($"[DEBUG] Global cache check: {(globalSession != null ? "Found" : "Not found")}");
+        // Проверяем глобальный кэш через Redis
+        var globalSession = _redisCache.GetSession(userId, sessionId);
+        Console.WriteLine($"[DEBUG] Redis cache check: {(globalSession != null ? "Found" : "Not found")}");
+        
         if (globalSession != null)
         {
             try 
             {
-                // Для глобального кэша всегда проверяем авторизацию, т.к. там только успешные сессии
+                // Для сессии из Redis всегда проверяем авторизацию
                 if (await globalSession.ValidateSessionAsync())
                 {
-                    Console.WriteLine("[DEBUG] Global session is valid");
+                    Console.WriteLine("[DEBUG] Redis session is valid");
                     return globalSession;
                 }
-                Console.WriteLine("[DEBUG] Global session is invalid");
+                Console.WriteLine("[DEBUG] Redis session is invalid");
             }
             catch (ObjectDisposedException)
             {
-                Console.WriteLine("[DEBUG] Global session is disposed, removing from cache");
-                TelegramClientCache.RemoveSession(userId, sessionId);
+                Console.WriteLine("[DEBUG] Redis session is disposed, removing from cache");
+                _redisCache.RemoveSession(userId, sessionId);
                 globalSession = null;
             }
             catch 
             {
-                Console.WriteLine("[DEBUG] Error validating global session, removing");
-                TelegramClientCache.RemoveSession(userId, sessionId);
+                Console.WriteLine("[DEBUG] Error validating Redis session, removing");
+                _redisCache.RemoveSession(userId, sessionId);
                 globalSession = null;
             }
-        }
-        
-        // Проверяем временный кэш (для процесса авторизации)
-        if (_cache.TryGetValue(cacheKey, out TelegramSession? tempSession))
-        {
-            Console.WriteLine("[DEBUG] Found session in temporary cache");
-            try 
-            {
-                // Для временного кэша просто проверяем существование файла
-                if (tempSession.IsSessionFileValid())
-                {
-                    Console.WriteLine("[DEBUG] Temporary session file is valid");
-                    return tempSession;
-                }
-                Console.WriteLine("[DEBUG] Temporary session file is invalid");
-            }
-            catch (ObjectDisposedException)
-            {
-                Console.WriteLine("[DEBUG] Temporary session is disposed");
-                _cache.Remove(cacheKey);
-                tempSession = null;
-            }
-            catch 
-            {
-                Console.WriteLine("[DEBUG] Error checking temporary session file");
-                _cache.Remove(cacheKey);
-                tempSession = null;
-            }
-        }
-        else
-        {
-            Console.WriteLine("[DEBUG] Session not found in temporary cache");
         }
 
-        // Проверяем БД только если нет сессии в кэшах
+        // Проверяем БД если сессия не найдена в Redis
         var dbSession = await _sessionRepository.GetActiveSessionAsync(userId, sessionId, cancellationToken);
         Console.WriteLine($"[DEBUG] DB session check: {(dbSession != null ? "Found" : "Not found")}");
+        
         if (dbSession == null)
         {
             return null;
@@ -131,9 +92,9 @@ public class TelegramSessionService : ITelegramSessionService
                     return null;
                 }
                 
-                Console.WriteLine("[DEBUG] New session from DB is valid, adding to global cache");
-                // Если сессия валидна, помещаем её в глобальный кэш
-                TelegramClientCache.SetSession(userId, sessionId, session);
+                Console.WriteLine("[DEBUG] New session from DB is valid, adding to Redis cache");
+                // Если сессия валидна, помещаем её в Redis кэш
+                _redisCache.SetSession(userId, sessionId, session);
                 return session;
             }
             catch (ObjectDisposedException)
@@ -143,9 +104,9 @@ public class TelegramSessionService : ITelegramSessionService
                 await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
                 return null;
             }
-            catch 
+            catch (Exception ex)
             {
-                Console.WriteLine("[DEBUG] Error validating new session from DB");
+                Console.WriteLine($"[DEBUG] Error validating new session from DB: {ex.Message}");
                 session.Dispose();
                 await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
                 return null;
@@ -161,7 +122,6 @@ public class TelegramSessionService : ITelegramSessionService
 
     public async Task<TelegramLoginResult> LoginWithPhoneAsync(string userId, string sessionId, string phone, CancellationToken cancellationToken)
     {
-        var cacheKey = GetCacheKey(userId, sessionId);
         Console.WriteLine($"[DEBUG] Starting login with phone. UserId: {userId}, SessionId: {sessionId}");
         
         // Проверяем, существует ли уже сессия с таким номером телефона
@@ -177,31 +137,16 @@ public class TelegramSessionService : ITelegramSessionService
         }
         
         // Очищаем предыдущие сессии
-        if (_cache.TryGetValue(cacheKey, out TelegramSession? existingSession))
-        {
-            Console.WriteLine("[DEBUG] Found and removing existing temporary session");
-            existingSession?.Dispose();
-            _cache.Remove(cacheKey);
-        }
-        TelegramClientCache.RemoveSession(userId, sessionId);
+        _redisCache.RemoveSession(userId, sessionId);
 
         // Создаем новую сессию с помощью менеджера сессий
         var session = await _sessionManager.CreateSessionAsync(userId, sessionId, phone);
         Console.WriteLine("[DEBUG] Created new session");
         
-        var cacheEntryOptions = new MemoryCacheEntryOptions()
-            .SetAbsoluteExpiration(SessionTimeout)
-            .RegisterPostEvictionCallback((key, value, reason, state) =>
-            {
-                if (value is TelegramSession telegramSession)
-                {
-                    Console.WriteLine($"[DEBUG] Session evicted from temporary cache. Reason: {reason}");
-                    telegramSession.Dispose();
-                }
-            });
-            
-        _cache.Set(cacheKey, session, cacheEntryOptions);
-        Console.WriteLine("[DEBUG] Session added to temporary cache");
+        // Сохраняем временную сессию в Redis с маркером "temporary"
+        // Мы можем сохранить временную сессию в Redis, в отличие от MemoryCache она останется даже при перезапуске
+        _redisCache.SetSession(userId, sessionId, session);
+        Console.WriteLine("[DEBUG] Session added to Redis cache");
         
         try 
         {
@@ -211,7 +156,7 @@ public class TelegramSessionService : ITelegramSessionService
 
             if (status == TelegramLoginStatus.Failed)
             {
-                _cache.Remove(cacheKey);
+                _redisCache.RemoveSession(userId, sessionId);
             }
 
             return new TelegramLoginResult
@@ -223,7 +168,7 @@ public class TelegramSessionService : ITelegramSessionService
         catch (Exception ex)
         {
             Console.WriteLine($"[DEBUG] Error during login: {ex.Message}");
-            _cache.Remove(cacheKey);
+            _redisCache.RemoveSession(userId, sessionId);
             return new TelegramLoginResult 
             { 
                 Status = TelegramLoginStatus.Failed,
@@ -288,8 +233,8 @@ public class TelegramSessionService : ITelegramSessionService
                 
                 // Перемещаем сессию из временного в глобальный кэш только после успешного сохранения
                 var cacheKey = GetCacheKey(userId, sessionId);
-                _cache.Remove(cacheKey);
-                TelegramClientCache.SetSession(userId, sessionId, session);
+                _redisCache.RemoveSession(userId, sessionId);
+                _redisCache.SetSession(userId, sessionId, session);
                 Console.WriteLine("[DEBUG] Successfully saved session to storage and global cache");
             }
             else
@@ -373,8 +318,8 @@ public class TelegramSessionService : ITelegramSessionService
                 
                 // Перемещаем сессию из временного в глобальный кэш только после успешного сохранения
                 var cacheKey = GetCacheKey(userId, sessionId);
-                _cache.Remove(cacheKey);
-                TelegramClientCache.SetSession(userId, sessionId, session);
+                _redisCache.RemoveSession(userId, sessionId);
+                _redisCache.SetSession(userId, sessionId, session);
                 Console.WriteLine("[DEBUG] Successfully saved session to storage and global cache");
             }
             else
@@ -402,38 +347,6 @@ public class TelegramSessionService : ITelegramSessionService
             };
         }
     }
-
-    // public async Task<TelegramLoginResult> GetSessionStatusAsync(
-    //     string userId, 
-    //     string sessionId, 
-    //     CancellationToken cancellationToken)
-    // {
-    //     var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-    //     if (session == null)
-    //         return new TelegramLoginResult 
-    //         { 
-    //             Status = TelegramLoginStatus.Expired,
-    //             Error = "Session expired"
-    //         };
-    //
-    //     // Проверяем авторизацию только для успешных сессий
-    //     if (session.Status == TelegramLoginStatus.Success && !await session.ValidateSessionAsync())
-    //     {
-    //         await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
-    //         session.Dispose();
-    //         return new TelegramLoginResult 
-    //         { 
-    //             Status = TelegramLoginStatus.Expired,
-    //             Error = "Session expired"
-    //         };
-    //     }
-    //
-    //     return new TelegramLoginResult 
-    //     { 
-    //         Status = session.Status,
-    //         PhoneNumber = session.PhoneNumber
-    //     };
-    // }
 
     public async Task<List<TelegramContactResponse>> GetContactsAsync(
         string userId, 
@@ -467,7 +380,7 @@ public class TelegramSessionService : ITelegramSessionService
         catch (ObjectDisposedException)
         {
             Console.WriteLine("[DEBUG] Сессия была освобождена, пытаемся восстановить");
-            TelegramClientCache.RemoveSession(userId, sessionId);
+            _redisCache.RemoveSession(userId, sessionId);
             
             // Пытаемся восстановить сессию
             session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
@@ -504,191 +417,6 @@ public class TelegramSessionService : ITelegramSessionService
         return telegramSessions.Cast<SessionData>().ToList();
     }
 
-    public async Task SubscribeToUpdatesAsync(string userId, string sessionId, long interlocutorId,
-        CancellationToken cancellationToken)
-    {
-        // Проверяем, нет ли уже активной подписки
-        if (!_subscriptionManager.TryAddSubscription(userId, sessionId, interlocutorId))
-        {
-            throw new InvalidOperationException(
-                $"Подписка на обновления для этой сессии и собеседника (ID: {interlocutorId}) уже существует");
-        }
-
-        var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-        if (session == null)
-        {
-            _subscriptionManager.RemoveSubscription(userId, sessionId, interlocutorId);
-            throw new Exception("Session not found or expired");
-        }
-
-        try
-        {
-            // Проверяем, нужно ли создавать новую подписку
-            bool needsSubscription = !_subscriptionManager.HasAnySubscriptions(userId, sessionId) ||
-                                     _subscriptionManager.GetSubscribedInterlocutors(userId, sessionId).Count() == 1;
-
-            if (needsSubscription)
-            {
-                // Сначала отписываемся от текущих обновлений
-                session.UnsubscribeFromUpdates();
-
-                // Подписываемся на новые обновления
-                session.SubscribeToUpdates((sender, update) =>
-                {
-                    // Приводим IObject к Update
-                    if (update is not Update updateBase)
-                        return;
-
-                    Message? message = null;
-
-                    // Проверяем различные типы обновлений
-                    switch (updateBase)
-                    {
-                        case UpdateNewMessage updateNewMessage:
-                            message = updateNewMessage.message as Message;
-                            break;
-                        case UpdateEditMessage:
-                        case UpdateDeleteMessages:
-                            // Пропускаем отредактированные и удаленные сообщения
-                            return;
-                        default:
-                            return;
-                    }
-
-                    if (message == null)
-                        return;
-
-                    // Получаем ID собеседника из сообщения
-                    long msgInterlocutorId = 0;
-                    if (message.peer_id is PeerUser peerUser)
-                    {
-                        msgInterlocutorId = peerUser.user_id;
-                    }
-                    else
-                    {
-                        // Не личное сообщение, пропускаем
-                        return;
-                    }
-
-                    // Проверяем, есть ли активная подписка для этого собеседника
-                    if (!_subscriptionManager.HasSubscription(userId, sessionId, msgInterlocutorId))
-                        return;
-
-                    var telegramMessage = new TelegramMessageEntity
-                    {
-                        UserId = userId,
-                        SessionId = sessionId,
-                        TelegramUserId = session.GetUserId(),
-                        TelegramInterlocutorId = msgInterlocutorId,
-                        SenderId = message.from_id?.ID ?? 0,
-                        MessageTime = message.Date
-                    };
-
-                    _messageCollector.EnqueueMessage(telegramMessage);
-                });
-            }
-        }
-        catch
-        {
-            _subscriptionManager.RemoveSubscription(userId, sessionId, interlocutorId);
-            throw;
-        }
-    }
-
-    public async Task UnsubscribeFromUpdatesAsync(string userId, string sessionId, long interlocutorId,
-        CancellationToken cancellationToken)
-    {
-        _subscriptionManager.RemoveSubscription(userId, sessionId, interlocutorId);
-
-        // Проверяем, остались ли ещё активные подписки для этой сессии
-        if (!_subscriptionManager.HasAnySubscriptions(userId, sessionId))
-        {
-            var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-            if (session == null)
-            {
-                throw new Exception("Session not found or expired");
-            }
-
-            session.UnsubscribeFromUpdates();
-        }
-    }
-
-    public async Task<List<TelegramContactResponse>> GetSubscribedContactsAsync(string userId, string sessionId,
-        CancellationToken cancellationToken)
-    {
-        Console.WriteLine($"[DEBUG] Getting subscribed contacts for UserId: {userId}, SessionId: {sessionId}");
-
-        // Сначала проверяем наличие активной сессии
-        var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-        if (session == null)
-        {
-            Console.WriteLine("[DEBUG] No active session found");
-            return new List<TelegramContactResponse>();
-        }
-
-        // Проверяем статус авторизации
-        if (session.Status != TelegramLoginStatus.Success)
-        {
-            Console.WriteLine($"[DEBUG] Session is not authorized. Status: {session.Status}");
-            return new List<TelegramContactResponse>();
-        }
-
-        // Получаем список подписанных ID
-        var subscribedIds = _subscriptionManager.GetSubscribedInterlocutors(userId, sessionId);
-        if (!subscribedIds.Any())
-        {
-            Console.WriteLine("[DEBUG] No subscribed IDs found");
-            return new List<TelegramContactResponse>();
-        }
-
-        Console.WriteLine($"[DEBUG] Found {subscribedIds.Count()} subscribed IDs");
-
-        int retryCount = 0;
-        const int maxRetries = 2;
-
-        while (retryCount <= maxRetries)
-        {
-            try
-            {
-                var contacts = await session.GetContactsAsync();
-                Console.WriteLine($"[DEBUG] Retrieved {contacts.Count()} contacts");
-
-                // Фильтруем контакты по списку подписанных ID
-                return contacts.Where(c => subscribedIds.Contains(c.Id)).ToList();
-            }
-            catch (ObjectDisposedException)
-            {
-                Console.WriteLine($"[DEBUG] Session disposed, attempt {retryCount + 1} of {maxRetries + 1}");
-                TelegramClientCache.RemoveSession(userId, sessionId);
-
-                // Пытаемся восстановить сессию
-                session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-                if (session == null)
-                {
-                    Console.WriteLine("[DEBUG] Failed to restore session");
-                    return new List<TelegramContactResponse>();
-                }
-
-                retryCount++;
-                if (retryCount > maxRetries)
-                {
-                    Console.WriteLine("[DEBUG] Max retries reached");
-                    return new List<TelegramContactResponse>();
-                }
-
-                // Небольшая задержка перед повторной попыткой
-                await Task.Delay(500, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[DEBUG] Unexpected error: {ex.Message}");
-                return new List<TelegramContactResponse>();
-            }
-        }
-
-        return new List<TelegramContactResponse>();
-    }
-
     private string GetCacheKey(string userId, string sessionId) => $"{userId}_{sessionId}";
 
     private async Task<TelegramLoginStatus> HandleLoginResponseAsync(TelegramSession session, string loginResponse)
@@ -722,16 +450,8 @@ public class TelegramSessionService : ITelegramSessionService
     {
         try
         {
-            // Удаляем из кэша (если есть)
-            var cacheKey = GetCacheKey(userId, sessionId);
-            if (_cache.TryGetValue(cacheKey, out TelegramSession? tempSession))
-            {
-                tempSession?.Dispose();
-                _cache.Remove(cacheKey);
-            }
-            
-            // Удаляем из глобального кэша
-            TelegramClientCache.RemoveSession(userId, sessionId);
+            // Удаляем из Redis кэша
+            _redisCache.RemoveSession(userId, sessionId);
             
             // Очищаем локальные файлы
             await _sessionManager.DeleteSessionAsync(userId, sessionId);
@@ -761,16 +481,8 @@ public class TelegramSessionService : ITelegramSessionService
             // Удаляем каждую сессию из кэша и файловой системы
             foreach (var session in sessions)
             {
-                // Удаляем из временного кэша
-                var cacheKey = GetCacheKey(userId, session.SessionId);
-                if (_cache.TryGetValue(cacheKey, out TelegramSession? tempSession))
-                {
-                    tempSession?.Dispose();
-                    _cache.Remove(cacheKey);
-                }
-                
-                // Удаляем из глобального кэша
-                TelegramClientCache.RemoveSession(userId, session.SessionId);
+                // Удаляем из Redis кэша
+                _redisCache.RemoveSession(userId, session.SessionId);
                 
                 // Очищаем локальные файлы
                 await _sessionManager.DeleteSessionAsync(userId, session.SessionId);
@@ -793,7 +505,7 @@ public class TelegramSessionService : ITelegramSessionService
     /// <param name="sessionId">ID сессии</param>
     /// <param name="cancellationToken">Токен отмены</param>
     /// <returns>Объект сессии или null, если сессия не найдена</returns>
-    public async Task<object> GetSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
+    public async Task<object?> GetSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
     {
         Console.WriteLine($"[DEBUG] Getting session object for API access. UserId: {userId}, SessionId: {sessionId}");
         return await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
@@ -835,7 +547,7 @@ public class TelegramSessionService : ITelegramSessionService
         catch (ObjectDisposedException)
         {
             Console.WriteLine("[DEBUG] Сессия была освобождена, пытаемся восстановить");
-            TelegramClientCache.RemoveSession(userId, sessionId);
+            _redisCache.RemoveSession(userId, sessionId);
             
             // Пытаемся восстановить сессию
             session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
@@ -855,5 +567,80 @@ public class TelegramSessionService : ITelegramSessionService
             Console.WriteLine($"[DEBUG] Неожиданная ошибка при получении контактов: {ex.Message}");
             throw;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<TelegramSubscriptionData> AddSubscriptionAsync(
+        string userId, 
+        string sessionId, 
+        long interlocutorId, 
+        CancellationToken cancellationToken)
+    {
+        // Проверяем существование сессии
+        var session = await _sessionRepository.GetActiveSessionAsync(userId, sessionId, cancellationToken);
+        if (session == null)
+        {
+            throw new InvalidOperationException("Сессия не найдена");
+        }
+        
+        // Проверяем, существует ли уже подписка
+        if (await _subscriptionRepository.ExistsSubscriptionAsync(userId, sessionId, interlocutorId, cancellationToken))
+        {
+            throw new InvalidOperationException("Подписка уже существует");
+        }
+        
+        // Создаем новую подписку
+        var subscription = new TelegramSubscriptionData
+        {
+            UserId = userId,
+            SessionId = sessionId,
+            TelegramInterlocutorId = interlocutorId,
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        return await _subscriptionRepository.AddSubscriptionAsync(subscription, cancellationToken);
+    }
+    
+    /// <inheritdoc />
+    public async Task<bool> RemoveSubscriptionAsync(
+        string userId, 
+        string sessionId, 
+        long interlocutorId, 
+        CancellationToken cancellationToken)
+    {
+        // Проверяем существование сессии
+        var session = await _sessionRepository.GetActiveSessionAsync(userId, sessionId, cancellationToken);
+        if (session == null)
+        {
+            throw new InvalidOperationException("Сессия не найдена");
+        }
+        
+        return await _subscriptionRepository.RemoveSubscriptionAsync(userId, sessionId, interlocutorId, cancellationToken);
+    }
+    
+    /// <inheritdoc />
+    public async Task<List<TelegramSubscriptionData>> GetSubscriptionsAsync(
+        string userId, 
+        string sessionId, 
+        CancellationToken cancellationToken)
+    {
+        // Проверяем существование сессии
+        var session = await _sessionRepository.GetActiveSessionAsync(userId, sessionId, cancellationToken);
+        if (session == null)
+        {
+            throw new InvalidOperationException("Сессия не найдена");
+        }
+        
+        return await _subscriptionRepository.GetSessionSubscriptionsAsync(userId, sessionId, cancellationToken);
+    }
+    
+    /// <inheritdoc />
+    public async Task<bool> HasSubscriptionAsync(
+        string userId, 
+        string sessionId, 
+        long interlocutorId, 
+        CancellationToken cancellationToken)
+    {
+        return await _subscriptionRepository.ExistsSubscriptionAsync(userId, sessionId, interlocutorId, cancellationToken);
     }
 }

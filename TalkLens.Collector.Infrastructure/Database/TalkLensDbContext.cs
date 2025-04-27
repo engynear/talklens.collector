@@ -6,6 +6,7 @@ namespace TalkLens.Collector.Infrastructure.Database;
 public class TalkLensDbContext : DataConnection
 {
     public ITable<TelegramSessionEntity> TelegramSessions => this.GetTable<TelegramSessionEntity>();
+    public ITable<TelegramSubscriptionEntity> TelegramSubscriptions => this.GetTable<TelegramSubscriptionEntity>();
 
     public TalkLensDbContext(string connectionString) 
         : base(ProviderName.PostgreSQL, connectionString)

@@ -13,20 +13,46 @@ public class TelegramMessageCollectorService : BackgroundService
 {
     private readonly ILogger<TelegramMessageCollectorService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ITelegramSubscriptionRepository _subscriptionRepository;
     private readonly ConcurrentDictionary<string, ConcurrentBag<TelegramMessageEntity>> _messageQueue;
     private readonly TimeSpan _processingInterval = TimeSpan.FromMinutes(1);
 
     public TelegramMessageCollectorService(
         ILogger<TelegramMessageCollectorService> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ITelegramSubscriptionRepository subscriptionRepository)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _subscriptionRepository = subscriptionRepository;
         _messageQueue = new ConcurrentDictionary<string, ConcurrentBag<TelegramMessageEntity>>();
     }
 
     public void EnqueueMessage(TelegramMessageEntity message)
     {
+        // Получаем актуальный sessionId (без UserId в составном идентификаторе)
+        string sessionId = message.SessionId;
+        if (sessionId.Contains('_'))
+        {
+            // Формат: "UserId_SessionId" -> берём только SessionId
+            sessionId = sessionId.Split('_').Last();
+        }
+        
+        // Проверяем наличие подписки на данный контакт
+        var hasSubscription = _subscriptionRepository.ExistsAnySubscriptionAsync(
+            sessionId,
+            message.TelegramInterlocutorId,
+            CancellationToken.None).GetAwaiter().GetResult();
+            
+        // Если нет подписки, пропускаем сообщение
+        if (!hasSubscription)
+        {
+            _logger.LogDebug(
+                "Пропущено сообщение от {InterlocutorId}, т.к. нет подписки. Сессия: {SessionId}, Пользователь: {UserId}", 
+                message.TelegramInterlocutorId, sessionId, message.UserId);
+            return;
+        }
+        
         var key = $"{message.UserId}_{message.SessionId}";
         var messages = _messageQueue.GetOrAdd(key, _ => new ConcurrentBag<TelegramMessageEntity>());
         messages.Add(message);
@@ -77,4 +103,4 @@ public class TelegramMessageCollectorService : BackgroundService
             }
         }
     }
-}
+} 

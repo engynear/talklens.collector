@@ -77,44 +77,6 @@ public interface ITelegramSessionService : ISessionService
         CancellationToken cancellationToken);
         
     /// <summary>
-    /// Подписывается на обновления сообщений для указанной сессии и собеседника
-    /// </summary>
-    /// <param name="userId">Идентификатор пользователя</param>
-    /// <param name="sessionId">Идентификатор сессии</param>
-    /// <param name="interlocutorId">Идентификатор собеседника</param>
-    /// <param name="cancellationToken">Токен отмены</param>
-    Task SubscribeToUpdatesAsync(
-        string userId, 
-        string sessionId, 
-        long interlocutorId,
-        CancellationToken cancellationToken);
-        
-    /// <summary>
-    /// Отписывается от обновлений сообщений для указанной сессии и собеседника
-    /// </summary>
-    /// <param name="userId">Идентификатор пользователя</param>
-    /// <param name="sessionId">Идентификатор сессии</param>
-    /// <param name="interlocutorId">Идентификатор собеседника</param>
-    /// <param name="cancellationToken">Токен отмены</param>
-    Task UnsubscribeFromUpdatesAsync(
-        string userId, 
-        string sessionId, 
-        long interlocutorId,
-        CancellationToken cancellationToken);
-        
-    /// <summary>
-    /// Получает список контактов, на которые оформлена подписка на обновления
-    /// </summary>
-    /// <param name="userId">Идентификатор пользователя</param>
-    /// <param name="sessionId">Идентификатор сессии</param>
-    /// <param name="cancellationToken">Токен отмены</param>
-    /// <returns>Список подписанных контактов</returns>
-    Task<List<TelegramContactResponse>> GetSubscribedContactsAsync(
-        string userId, 
-        string sessionId,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Получает объект сессии Telegram для доступа к API
     /// </summary>
     /// <param name="userId">ID пользователя</param>
@@ -136,4 +98,58 @@ public interface ITelegramSessionService : ISessionService
         string sessionId,
         bool forceRefresh = false,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Добавляет подписку на контакт Telegram
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор контакта Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Данные созданной подписки</returns>
+    Task<TelegramSubscriptionData> AddSubscriptionAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Удаляет подписку на контакт Telegram
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор контакта Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>True если подписка удалена, иначе False</returns>
+    Task<bool> RemoveSubscriptionAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Получает список всех подписок для указанной сессии Telegram
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Список подписок</returns>
+    Task<List<TelegramSubscriptionData>> GetSubscriptionsAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Проверяет наличие подписки на контакт Telegram
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор контакта Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>True если подписка существует, иначе False</returns>
+    Task<bool> HasSubscriptionAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
 }

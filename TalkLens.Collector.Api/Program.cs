@@ -5,6 +5,7 @@ using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 using System.Text;
 using TalkLens.Collector.Domain.Interfaces;
+using TalkLens.Collector.Infrastructure.Configuration;
 using TalkLens.Collector.Infrastructure.Database;
 using TalkLens.Collector.Infrastructure.Repositories;
 using TalkLens.Collector.Infrastructure.Services;
@@ -118,7 +119,13 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 
 // Регистрация зависимостей для кэширования
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<RedisTelegramSessionCache>();
+builder.Services.AddSingleton<RedisTelegramSessionCache>(sp => 
+    new RedisTelegramSessionCache(
+        sp.GetRequiredService<IConnectionMultiplexer>(),
+        builder.Configuration,
+        sp.GetRequiredService<ILogger<RedisTelegramSessionCache>>(),
+        sp
+    ));
 builder.Services.AddSingleton<RedisTelegramApiCache>();
 
 // Регистрация хранилища сессий Telegram
@@ -137,13 +144,7 @@ else
 
 // Регистрация сервисов для ограничения запросов и кэширования
 builder.Services.AddSingleton<TelegramRateLimiter>();
-
-// Используем стандартный TelegramApiCache, так как редис кэш еще не работает корректно
-builder.Services.AddSingleton<TelegramApiCache>(provider => 
-    new TelegramApiCache(
-        provider.GetRequiredService<IMemoryCache>(),
-        provider.GetRequiredService<IConfiguration>(),
-        provider.GetRequiredService<ILogger<TelegramApiCache>>()));
+builder.Services.AddSingleton<TelegramApiCache>();
 
 // Для отладки добавляем вывод информации о Redis ConnectionMultiplexer
 using (var scope = builder.Services.BuildServiceProvider().CreateScope())
@@ -169,29 +170,54 @@ builder.Services.AddScoped<ITelegramSessionService, TelegramSessionService>();
 builder.Services.AddScoped<ISessionService>(provider => 
     provider.GetRequiredService<ITelegramSessionService>());
 
-builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
+// Регистрация сервиса мониторинга обновлений Telegram
+builder.Services.AddHostedService<TelegramUpdateMonitorService>();
 
-// Регистрируем сервисы
-builder.Services.AddSingleton<TelegramMessageCollectorService>();
-builder.Services.AddSingleton<TelegramSubscriptionManager>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramMessageCollectorService>());
+// Регистрация сервиса сбора сообщений Telegram
+builder.Services.AddHostedService<TelegramMessageCollectorService>();
+
+builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
+builder.Services.AddScoped<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
 
 var app = builder.Build();
 
-// Инициализируем Redis кэш для TelegramClientCache
-try
+// Инициализируем сессии из Redis при запуске приложения
+using (var scope = app.Services.CreateScope())
 {
-    using (var scope = app.Services.CreateScope())
+    try
     {
+        Console.WriteLine("[INFO] Начинаем инициализацию сессий из Redis...");
         var redisCache = scope.ServiceProvider.GetRequiredService<RedisTelegramSessionCache>();
-        TelegramClientCache.InitializeRedisCache(redisCache);
-        Console.WriteLine("Redis кэш для Telegram сессий успешно инициализирован");
+        
+        // Запускаем инициализацию сессий с таймаутом
+        var initTask = Task.Run(async () => 
+        {
+            try 
+            {
+                Console.WriteLine("[INFO] Запущена задача инициализации сессий из Redis");
+                await redisCache.InitializeSessionsFromRedis();
+                Console.WriteLine("[INFO] Сессии Telegram успешно инициализированы из Redis");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Ошибка при инициализации сессий из Redis: {ex.Message}");
+                Console.WriteLine($"[ERROR] Стек вызовов: {ex.StackTrace}");
+            }
+        });
+        
+        // Ждем завершения задачи с таймаутом
+        bool completed = initTask.Wait(TimeSpan.FromSeconds(60)); // Увеличиваем таймаут до 60 секунд
+        
+        if (!completed)
+        {
+            Console.WriteLine("[WARNING] Превышено время ожидания при инициализации сессий из Redis. Продолжаем запуск приложения.");
+        }
     }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[ERROR] Ошибка при инициализации Redis кэша: {ex.Message}");
-    Console.WriteLine("Будет использоваться локальное кэширование сессий в памяти");
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ERROR] Не удалось получить необходимые сервисы для инициализации сессий: {ex.Message}");
+        Console.WriteLine($"[ERROR] Стек вызовов: {ex.StackTrace}");
+    }
 }
 
 app.UseSwagger();

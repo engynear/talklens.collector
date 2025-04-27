@@ -213,66 +213,125 @@ public class TelegramSessionController : BaseApiController
             return StatusCode(500, $"Ошибка при получении контактов: {ex.Message}");
         }
     }
-    
+
     /// <summary>
-    /// Подписывается на обновления сообщений для указанной сессии и собеседника
+    /// Добавляет подписку на контакт Telegram
     /// </summary>
-    [HttpPost("{sessionId}/interlocutors/{interlocutorId}/subscribe")]
-    public async Task<ActionResult> SubscribeToUpdatesAsync(
-        [FromRoute] string sessionId,
-        [FromRoute] long interlocutorId,
+    /// <remarks>
+    /// Данная подписка позволяет получать сообщения только от выбранных контактов
+    /// </remarks>
+    [HttpPost("subscriptions")]
+    public async Task<ActionResult<TelegramSubscriptionResponse>> AddSubscriptionAsync(
+        [FromBody] TelegramSubscriptionRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.SessionId == null)
+        {
+            return BadRequest(new { error = "Не указан идентификатор сессии" });
+        }
+        
         var userId = GetUserId();
+        
         try
         {
-            await _telegramSessionService.SubscribeToUpdatesAsync(userId, sessionId, interlocutorId, cancellationToken);
-            return Ok(new { message = "Подписка на обновления успешно оформлена" });
+            var subscription = await _telegramSessionService.AddSubscriptionAsync(
+                userId,
+                request.SessionId,
+                request.InterlocutorId,
+                cancellationToken);
+                
+            return Ok(new TelegramSubscriptionResponse
+            {
+                Id = subscription.Id,
+                SessionId = subscription.SessionId,
+                InterlocutorId = subscription.TelegramInterlocutorId,
+                CreatedAt = subscription.CreatedAt
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Ошибка при подписке на обновления: {ex.Message}");
+            return StatusCode(500, new { error = $"Ошибка при добавлении подписки: {ex.Message}" });
         }
     }
     
     /// <summary>
-    /// Отписывается от обновлений сообщений для указанной сессии и собеседника
+    /// Удаляет подписку на контакт Telegram
     /// </summary>
-    [HttpPost("{sessionId}/interlocutors/{interlocutorId}/unsubscribe")]
-    public async Task<ActionResult> UnsubscribeFromUpdatesAsync(
-        [FromRoute] string sessionId,
-        [FromRoute] long interlocutorId,
+    [HttpDelete("subscriptions")]
+    public async Task<ActionResult> RemoveSubscriptionAsync(
+        [FromBody] TelegramSubscriptionRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.SessionId == null)
+        {
+            return BadRequest(new { error = "Не указан идентификатор сессии" });
+        }
+        
         var userId = GetUserId();
+        
         try
         {
-            await _telegramSessionService.UnsubscribeFromUpdatesAsync(userId, sessionId, interlocutorId, cancellationToken);
-            return Ok(new { message = "Подписка на обновления успешно отменена" });
+            var result = await _telegramSessionService.RemoveSubscriptionAsync(
+                userId,
+                request.SessionId,
+                request.InterlocutorId,
+                cancellationToken);
+                
+            if (result)
+            {
+                return Ok(new { message = "Подписка успешно удалена" });
+            }
+            
+            return NotFound(new { error = "Подписка не найдена" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Ошибка при отмене подписки: {ex.Message}");
+            return StatusCode(500, new { error = $"Ошибка при удалении подписки: {ex.Message}" });
         }
     }
     
     /// <summary>
-    /// Получает список контактов, на которые оформлена подписка на обновления
+    /// Получает список всех подписок для указанной сессии Telegram
     /// </summary>
-    [HttpGet("{sessionId}/subscribed")]
-    public async Task<ActionResult<List<TelegramContactResponse>>> GetSubscribedContactsAsync(
+    [HttpGet("{sessionId}/subscriptions")]
+    public async Task<ActionResult<List<TelegramSubscriptionResponse>>> GetSubscriptionsAsync(
         [FromRoute] string sessionId,
         CancellationToken cancellationToken)
     {
         var userId = GetUserId();
+        
         try
         {
-            var contacts = await _telegramSessionService.GetSubscribedContactsAsync(userId, sessionId, cancellationToken);
-            return Ok(contacts);
+            var subscriptions = await _telegramSessionService.GetSubscriptionsAsync(
+                userId,
+                sessionId,
+                cancellationToken);
+                
+            var response = subscriptions.Select(s => new TelegramSubscriptionResponse
+            {
+                Id = s.Id,
+                SessionId = s.SessionId,
+                InterlocutorId = s.TelegramInterlocutorId,
+                CreatedAt = s.CreatedAt
+            }).ToList();
+            
+            return Ok(response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Ошибка при получении подписанных контактов: {ex.Message}");
+            return StatusCode(500, new { error = $"Ошибка при получении списка подписок: {ex.Message}" });
         }
     }
 } 
