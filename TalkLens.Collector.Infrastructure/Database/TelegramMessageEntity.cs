@@ -26,4 +26,4 @@ public class TelegramMessageEntity
     
     [Column("message_time")]
     public DateTime MessageTime { get; set; }
-} 
+}

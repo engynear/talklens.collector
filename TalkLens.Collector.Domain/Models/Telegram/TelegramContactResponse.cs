@@ -12,4 +12,16 @@ public class TelegramContactResponse
     
     [JsonPropertyName("last_name")]
     public string? LastName { get; set; }
+
+    [JsonPropertyName("username")]
+    public string? Username { get; set; }
+    
+    [JsonPropertyName("phone")]
+    public string? Phone { get; set; }
+    
+    [JsonPropertyName("has_photo")]
+    public bool HasPhoto { get; set; }
+    
+    [JsonPropertyName("last_seen")]
+    public string? LastSeen { get; set; }
 } 

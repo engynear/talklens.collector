@@ -11,4 +11,4 @@ public class TalkLensDbContext : DataConnection
         : base(ProviderName.PostgreSQL, connectionString)
     {
     }
-} 
+}

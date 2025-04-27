@@ -1,15 +1,15 @@
 using System;
-using TalkLens.Collector.Domain.Models;
+using TalkLens.Collector.Api.Models.Session;
 
-namespace TalkLens.Collector.Domain.Models.Telegram;
+namespace TalkLens.Collector.Api.Models.Telegram;
 
 /// <summary>
-/// Модель данных сессии Telegram
+/// Модель ответа для сессий Telegram
 /// </summary>
-public class TelegramSessionData : SessionData
+public sealed record TelegramSessionResponse : SessionResponse
 {
     /// <summary>
-    /// Номер телефона, связанный с этой сессией
+    /// Номер телефона, связанный с сессией Telegram
     /// </summary>
     public string PhoneNumber { get; set; }
     
@@ -18,7 +18,7 @@ public class TelegramSessionData : SessionData
     /// </summary>
     public long? TelegramUserId { get; set; }
     
-    public TelegramSessionData()
+    public TelegramSessionResponse()
     {
         SessionType = "Telegram";
     }

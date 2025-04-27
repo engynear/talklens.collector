@@ -1,11 +1,30 @@
+using System;
+using TalkLens.Collector.Api.Models.Session;
+
 namespace TalkLens.Collector.Api.Models.Telegram;
 
-public sealed record SessionResponse
+/// <summary>
+/// Модель ответа для статуса сессии Telegram
+/// </summary>
+public class TelegramSessionStatusResponse
 {
-    public required string SessionId { get; init; }
-    public required string Status { get; init; }
+    /// <summary>
+    /// Идентификатор сессии (клиентский)
+    /// </summary>
+    public string SessionId { get; set; }
     
-    public string? PhoneNumber { get; init; }
+    /// <summary>
+    /// Статус авторизации
+    /// </summary>
+    public string Status { get; set; }
     
-    public string? Error { get; init; }
+    /// <summary>
+    /// Номер телефона
+    /// </summary>
+    public string PhoneNumber { get; set; }
+    
+    /// <summary>
+    /// Сообщение об ошибке (если есть)
+    /// </summary>
+    public string Error { get; set; }
 }

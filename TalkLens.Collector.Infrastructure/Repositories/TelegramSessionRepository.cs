@@ -49,6 +49,28 @@ public class TelegramSessionRepository : ITelegramSessionRepository
 
         return entities.Select(MapToData).ToList();
     }
+    
+    public async Task<bool> ExistsActiveSessionWithPhoneAsync(string phoneNumber, CancellationToken cancellationToken)
+    {
+        return await _db.TelegramSessions
+            .AnyAsync(s => s.PhoneNumber == phoneNumber && s.IsActive, cancellationToken);
+    }
+    
+    public async Task<bool> DeleteSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
+    {
+        int deleted = await _db.TelegramSessions
+            .Where(s => s.UserId == userId && s.SessionId == sessionId)
+            .DeleteAsync(cancellationToken);
+            
+        return deleted > 0;
+    }
+    
+    public async Task<int> DeleteAllUserSessionsAsync(string userId, CancellationToken cancellationToken)
+    {
+        return await _db.TelegramSessions
+            .Where(s => s.UserId == userId)
+            .DeleteAsync(cancellationToken);
+    }
 
     private static TelegramSessionData MapToData(TelegramSessionEntity entity)
     {

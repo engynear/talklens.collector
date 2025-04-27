@@ -4,9 +4,10 @@ using TalkLens.Collector.Domain.Interfaces;
 using TalkLens.Collector.Domain.Models.Telegram;
 using TalkLens.Collector.Infrastructure.Database;
 using TalkLens.Collector.Infrastructure.Messengers.Telegram;
+using TalkLens.Collector.Infrastructure.Services.Telegram;
 using TL;
 using System.Collections.Concurrent;
-using System.Linq;
+using TalkLens.Collector.Domain.Models;
 
 namespace TalkLens.Collector.Infrastructure.Services;
 
@@ -16,6 +17,7 @@ public class TelegramSessionService : ITelegramSessionService
     private readonly ITelegramSessionRepository _sessionRepository;
     private readonly TelegramMessageCollectorService _messageCollector;
     private readonly TelegramSubscriptionManager _subscriptionManager;
+    private readonly TelegramSessionManager _sessionManager;
     private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(3);
     // Ключ: "{userId}_{sessionId}_{interlocutorId}"
     private readonly ConcurrentDictionary<string, bool> _activeSubscriptions = new();
@@ -27,12 +29,14 @@ public class TelegramSessionService : ITelegramSessionService
         IMemoryCache cache, 
         ITelegramSessionRepository sessionRepository,
         TelegramMessageCollectorService messageCollector,
-        TelegramSubscriptionManager subscriptionManager)
+        TelegramSubscriptionManager subscriptionManager,
+        TelegramSessionManager sessionManager)
     {
         _cache = cache;
         _sessionRepository = sessionRepository;
         _messageCollector = messageCollector;
         _subscriptionManager = subscriptionManager;
+        _sessionManager = sessionManager;
     }
 
     private async Task<TelegramSession?> GetOrRestoreSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
@@ -112,7 +116,9 @@ public class TelegramSessionService : ITelegramSessionService
         try
         {
             Console.WriteLine("[DEBUG] Creating new session from DB data");
-            var session = new TelegramSession(userId, sessionId, dbSession.PhoneNumber);
+            
+            // Создаем сессию с помощью менеджера сессий
+            var session = await _sessionManager.CreateSessionAsync(userId, sessionId, dbSession.PhoneNumber);
             
             try 
             {
@@ -145,9 +151,9 @@ public class TelegramSessionService : ITelegramSessionService
                 return null;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            Console.WriteLine("[DEBUG] Error creating session from DB");
+            Console.WriteLine($"[DEBUG] Error creating session from DB: {ex.Message}");
             await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
             return null;
         }
@@ -158,6 +164,18 @@ public class TelegramSessionService : ITelegramSessionService
         var cacheKey = GetCacheKey(userId, sessionId);
         Console.WriteLine($"[DEBUG] Starting login with phone. UserId: {userId}, SessionId: {sessionId}");
         
+        // Проверяем, существует ли уже сессия с таким номером телефона
+        if (await _sessionRepository.ExistsActiveSessionWithPhoneAsync(phone, cancellationToken))
+        {
+            Console.WriteLine($"[DEBUG] Session with phone {phone} already exists");
+            return new TelegramLoginResult
+            {
+                Status = TelegramLoginStatus.Failed,
+                PhoneNumber = phone,
+                Error = "Сессия с таким номером телефона уже существует"
+            };
+        }
+        
         // Очищаем предыдущие сессии
         if (_cache.TryGetValue(cacheKey, out TelegramSession? existingSession))
         {
@@ -167,7 +185,8 @@ public class TelegramSessionService : ITelegramSessionService
         }
         TelegramClientCache.RemoveSession(userId, sessionId);
 
-        var session = new TelegramSession(userId, sessionId);
+        // Создаем новую сессию с помощью менеджера сессий
+        var session = await _sessionManager.CreateSessionAsync(userId, sessionId, phone);
         Console.WriteLine("[DEBUG] Created new session");
         
         var cacheEntryOptions = new MemoryCacheEntryOptions()
@@ -192,22 +211,18 @@ public class TelegramSessionService : ITelegramSessionService
 
             if (status == TelegramLoginStatus.Failed)
             {
-                Console.WriteLine("[DEBUG] Login failed, removing session");
-                session.Dispose();
                 _cache.Remove(cacheKey);
             }
 
-            return new TelegramLoginResult 
-            { 
+            return new TelegramLoginResult
+            {
                 Status = status,
-                PhoneNumber = session.PhoneNumber
+                PhoneNumber = phone
             };
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[DEBUG] Login error: {ex.Message}");
-            await session.SetStatusAsync(TelegramLoginStatus.Failed);
-            session.Dispose();
+            Console.WriteLine($"[DEBUG] Error during login: {ex.Message}");
             _cache.Remove(cacheKey);
             return new TelegramLoginResult 
             { 
@@ -253,12 +268,29 @@ public class TelegramSessionService : ITelegramSessionService
                     IsActive = true
                 };
 
+                // Сначала сохраняем в базу данных
                 await _sessionRepository.SaveSessionAsync(sessionData, cancellationToken);
                 
-                // Перемещаем сессию из временного в глобальный кэш
+                // Затем сохраняем файл сессии в хранилище и ждем завершения
+                bool saveSuccess = await _sessionManager.SaveSessionAsync(userId, sessionId);
+                if (!saveSuccess)
+                {
+                    Console.WriteLine("[DEBUG] Failed to save session file to storage");
+                    // Если не удалось сохранить сессию, считаем авторизацию неуспешной
+                    await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
+                    return new TelegramLoginResult 
+                    { 
+                        Status = TelegramLoginStatus.Failed,
+                        PhoneNumber = session.PhoneNumber,
+                        Error = "Не удалось сохранить сессию в хранилище"
+                    };
+                }
+                
+                // Перемещаем сессию из временного в глобальный кэш только после успешного сохранения
                 var cacheKey = GetCacheKey(userId, sessionId);
                 _cache.Remove(cacheKey);
                 TelegramClientCache.SetSession(userId, sessionId, session);
+                Console.WriteLine("[DEBUG] Successfully saved session to storage and global cache");
             }
             else
             {
@@ -321,12 +353,29 @@ public class TelegramSessionService : ITelegramSessionService
                     IsActive = true
                 };
 
+                // Сначала сохраняем в базу данных
                 await _sessionRepository.SaveSessionAsync(sessionData, cancellationToken);
                 
-                // Перемещаем сессию из временного в глобальный кэш
+                // Затем сохраняем файл сессии в хранилище и ждем завершения
+                bool saveSuccess = await _sessionManager.SaveSessionAsync(userId, sessionId);
+                if (!saveSuccess)
+                {
+                    Console.WriteLine("[DEBUG] Failed to save session file to storage");
+                    // Если не удалось сохранить сессию, считаем авторизацию неуспешной
+                    await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
+                    return new TelegramLoginResult 
+                    { 
+                        Status = TelegramLoginStatus.Failed,
+                        PhoneNumber = session.PhoneNumber,
+                        Error = "Не удалось сохранить сессию в хранилище"
+                    };
+                }
+                
+                // Перемещаем сессию из временного в глобальный кэш только после успешного сохранения
                 var cacheKey = GetCacheKey(userId, sessionId);
                 _cache.Remove(cacheKey);
                 TelegramClientCache.SetSession(userId, sessionId, session);
+                Console.WriteLine("[DEBUG] Successfully saved session to storage and global cache");
             }
             else
             {
@@ -354,58 +403,115 @@ public class TelegramSessionService : ITelegramSessionService
         }
     }
 
-    public async Task<TelegramLoginResult> GetSessionStatusAsync(
+    // public async Task<TelegramLoginResult> GetSessionStatusAsync(
+    //     string userId, 
+    //     string sessionId, 
+    //     CancellationToken cancellationToken)
+    // {
+    //     var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+    //     if (session == null)
+    //         return new TelegramLoginResult 
+    //         { 
+    //             Status = TelegramLoginStatus.Expired,
+    //             Error = "Session expired"
+    //         };
+    //
+    //     // Проверяем авторизацию только для успешных сессий
+    //     if (session.Status == TelegramLoginStatus.Success && !await session.ValidateSessionAsync())
+    //     {
+    //         await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
+    //         session.Dispose();
+    //         return new TelegramLoginResult 
+    //         { 
+    //             Status = TelegramLoginStatus.Expired,
+    //             Error = "Session expired"
+    //         };
+    //     }
+    //
+    //     return new TelegramLoginResult 
+    //     { 
+    //         Status = session.Status,
+    //         PhoneNumber = session.PhoneNumber
+    //     };
+    // }
+
+    public async Task<List<TelegramContactResponse>> GetContactsAsync(
         string userId, 
-        string sessionId, 
+        string sessionId,
         CancellationToken cancellationToken)
     {
+        Console.WriteLine($"[DEBUG] Получение контактов для UserId: {userId}, SessionId: {sessionId}");
+        
+        // Используем менеджер сессий для получения/создания сессии
         var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
         if (session == null)
-            return new TelegramLoginResult 
-            { 
-                Status = TelegramLoginStatus.Expired,
-                Error = "Session expired"
-            };
-
-        // Проверяем авторизацию только для успешных сессий
-        if (session.Status == TelegramLoginStatus.Success && !await session.ValidateSessionAsync())
         {
-            await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
-            session.Dispose();
-            return new TelegramLoginResult 
-            { 
-                Status = TelegramLoginStatus.Expired,
-                Error = "Session expired"
-            };
+            Console.WriteLine("[DEBUG] Сессия не найдена");
+            throw new Exception("Сессия не найдена или истекла");
+        }
+        
+        // Проверяем статус авторизации
+        if (session.Status != TelegramLoginStatus.Success)
+        {
+            Console.WriteLine($"[DEBUG] Сессия не авторизована. Статус: {session.Status}");
+            throw new Exception("Сессия не авторизована");
         }
 
-        return new TelegramLoginResult 
-        { 
-            Status = session.Status,
-            PhoneNumber = session.PhoneNumber
-        };
+        try
+        {
+            // Используем метод сессии для получения контактов
+            var contacts = await session.GetContactsAsync(false, cancellationToken);
+            Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} контактов");
+            return contacts;
+        }
+        catch (ObjectDisposedException)
+        {
+            Console.WriteLine("[DEBUG] Сессия была освобождена, пытаемся восстановить");
+            TelegramClientCache.RemoveSession(userId, sessionId);
+            
+            // Пытаемся восстановить сессию
+            session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+            if (session == null)
+            {
+                Console.WriteLine("[DEBUG] Не удалось восстановить сессию");
+                throw new Exception("Не удалось восстановить сессию");
+            }
+            
+            // Повторяем попытку с новой сессией
+            var contacts = await session.GetContactsAsync(false, cancellationToken);
+            Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} контактов после восстановления сессии");
+            return contacts;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Неожиданная ошибка при получении контактов: {ex.Message}");
+            throw;
+        }
     }
 
-    public async Task<List<TelegramContactResponse>> GetContactsAsync(string userId, string sessionId, CancellationToken cancellationToken)
-    {
-        var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
-        if (session == null)
-            throw new Exception("Session expired");
-
-        return await session.GetContactsAsync();
-    }
-
-    public async Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken)
+    public async Task<List<TelegramSessionData>> GetActiveSessionsAsync(
+        string userId, 
+        CancellationToken cancellationToken)
     {
         return await _sessionRepository.GetActiveSessionsAsync(userId, cancellationToken);
     }
 
-    public async Task SubscribeToUpdatesAsync(string userId, string sessionId, long interlocutorId, CancellationToken cancellationToken)
+    // Реализация базового интерфейса ISessionService
+    async Task<List<SessionData>> ISessionService.GetActiveSessionsAsync(string userId, CancellationToken cancellationToken)
+    {
+        var telegramSessions = await GetActiveSessionsAsync(userId, cancellationToken);
+        // Преобразуем TelegramSessionData в базовый тип SessionData
+        return telegramSessions.Cast<SessionData>().ToList();
+    }
+
+    public async Task SubscribeToUpdatesAsync(string userId, string sessionId, long interlocutorId,
+        CancellationToken cancellationToken)
     {
         // Проверяем, нет ли уже активной подписки
         if (!_subscriptionManager.TryAddSubscription(userId, sessionId, interlocutorId))
         {
-            throw new InvalidOperationException($"Подписка на обновления для этой сессии и собеседника (ID: {interlocutorId}) уже существует");
+            throw new InvalidOperationException(
+                $"Подписка на обновления для этой сессии и собеседника (ID: {interlocutorId}) уже существует");
         }
 
         var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
@@ -418,14 +524,14 @@ public class TelegramSessionService : ITelegramSessionService
         try
         {
             // Проверяем, нужно ли создавать новую подписку
-            bool needsSubscription = !_subscriptionManager.HasAnySubscriptions(userId, sessionId) || 
-                                    _subscriptionManager.GetSubscribedInterlocutors(userId, sessionId).Count() == 1;
-            
+            bool needsSubscription = !_subscriptionManager.HasAnySubscriptions(userId, sessionId) ||
+                                     _subscriptionManager.GetSubscribedInterlocutors(userId, sessionId).Count() == 1;
+
             if (needsSubscription)
             {
                 // Сначала отписываемся от текущих обновлений
                 session.UnsubscribeFromUpdates();
-                
+
                 // Подписываемся на новые обновления
                 session.SubscribeToUpdates((sender, update) =>
                 {
@@ -467,7 +573,7 @@ public class TelegramSessionService : ITelegramSessionService
                     // Проверяем, есть ли активная подписка для этого собеседника
                     if (!_subscriptionManager.HasSubscription(userId, sessionId, msgInterlocutorId))
                         return;
-                    
+
                     var telegramMessage = new TelegramMessageEntity
                     {
                         UserId = userId,
@@ -489,7 +595,8 @@ public class TelegramSessionService : ITelegramSessionService
         }
     }
 
-    public async Task UnsubscribeFromUpdatesAsync(string userId, string sessionId, long interlocutorId, CancellationToken cancellationToken)
+    public async Task UnsubscribeFromUpdatesAsync(string userId, string sessionId, long interlocutorId,
+        CancellationToken cancellationToken)
     {
         _subscriptionManager.RemoveSubscription(userId, sessionId, interlocutorId);
 
@@ -506,7 +613,8 @@ public class TelegramSessionService : ITelegramSessionService
         }
     }
 
-    public async Task<List<TelegramContactResponse>> GetSubscribedContactsAsync(string userId, string sessionId, CancellationToken cancellationToken)
+    public async Task<List<TelegramContactResponse>> GetSubscribedContactsAsync(string userId, string sessionId,
+        CancellationToken cancellationToken)
     {
         Console.WriteLine($"[DEBUG] Getting subscribed contacts for UserId: {userId}, SessionId: {sessionId}");
 
@@ -524,7 +632,7 @@ public class TelegramSessionService : ITelegramSessionService
             Console.WriteLine($"[DEBUG] Session is not authorized. Status: {session.Status}");
             return new List<TelegramContactResponse>();
         }
-        
+
         // Получаем список подписанных ID
         var subscribedIds = _subscriptionManager.GetSubscribedInterlocutors(userId, sessionId);
         if (!subscribedIds.Any())
@@ -534,17 +642,17 @@ public class TelegramSessionService : ITelegramSessionService
         }
 
         Console.WriteLine($"[DEBUG] Found {subscribedIds.Count()} subscribed IDs");
-        
+
         int retryCount = 0;
         const int maxRetries = 2;
-        
+
         while (retryCount <= maxRetries)
         {
             try
             {
                 var contacts = await session.GetContactsAsync();
                 Console.WriteLine($"[DEBUG] Retrieved {contacts.Count()} contacts");
-                
+
                 // Фильтруем контакты по списку подписанных ID
                 return contacts.Where(c => subscribedIds.Contains(c.Id)).ToList();
             }
@@ -552,7 +660,7 @@ public class TelegramSessionService : ITelegramSessionService
             {
                 Console.WriteLine($"[DEBUG] Session disposed, attempt {retryCount + 1} of {maxRetries + 1}");
                 TelegramClientCache.RemoveSession(userId, sessionId);
-                
+
                 // Пытаемся восстановить сессию
                 session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
                 if (session == null)
@@ -560,14 +668,14 @@ public class TelegramSessionService : ITelegramSessionService
                     Console.WriteLine("[DEBUG] Failed to restore session");
                     return new List<TelegramContactResponse>();
                 }
-                
+
                 retryCount++;
                 if (retryCount > maxRetries)
                 {
                     Console.WriteLine("[DEBUG] Max retries reached");
                     return new List<TelegramContactResponse>();
                 }
-                
+
                 // Небольшая задержка перед повторной попыткой
                 await Task.Delay(500, cancellationToken);
             }
@@ -602,5 +710,150 @@ public class TelegramSessionService : ITelegramSessionService
                 break;
         }
         return session.Status;
+    }
+
+    /// <summary>
+    /// Удаляет указанную сессию Telegram
+    /// </summary>
+    public async Task<bool> DeleteSessionAsync(
+        string userId,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Удаляем из кэша (если есть)
+            var cacheKey = GetCacheKey(userId, sessionId);
+            if (_cache.TryGetValue(cacheKey, out TelegramSession? tempSession))
+            {
+                tempSession?.Dispose();
+                _cache.Remove(cacheKey);
+            }
+            
+            // Удаляем из глобального кэша
+            TelegramClientCache.RemoveSession(userId, sessionId);
+            
+            // Очищаем локальные файлы
+            await _sessionManager.DeleteSessionAsync(userId, sessionId);
+            
+            // Удаляем из БД
+            return await _sessionRepository.DeleteSessionAsync(userId, sessionId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Error deleting session: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Удаляет все сессии Telegram указанного пользователя
+    /// </summary>
+    public async Task<int> DeleteAllSessionsAsync(
+        string userId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Получаем список активных сессий
+            var sessions = await _sessionRepository.GetActiveSessionsAsync(userId, cancellationToken);
+            
+            // Удаляем каждую сессию из кэша и файловой системы
+            foreach (var session in sessions)
+            {
+                // Удаляем из временного кэша
+                var cacheKey = GetCacheKey(userId, session.SessionId);
+                if (_cache.TryGetValue(cacheKey, out TelegramSession? tempSession))
+                {
+                    tempSession?.Dispose();
+                    _cache.Remove(cacheKey);
+                }
+                
+                // Удаляем из глобального кэша
+                TelegramClientCache.RemoveSession(userId, session.SessionId);
+                
+                // Очищаем локальные файлы
+                await _sessionManager.DeleteSessionAsync(userId, session.SessionId);
+            }
+            
+            // Удаляем из БД все сессии пользователя
+            return await _sessionRepository.DeleteAllUserSessionsAsync(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Error deleting all sessions: {ex.Message}");
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Получает объект сессии Telegram для доступа к API
+    /// </summary>
+    /// <param name="userId">ID пользователя</param>
+    /// <param name="sessionId">ID сессии</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Объект сессии или null, если сессия не найдена</returns>
+    public async Task<object> GetSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"[DEBUG] Getting session object for API access. UserId: {userId}, SessionId: {sessionId}");
+        return await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Получает список последних 10 контактов с сортировкой по дате последнего сообщения
+    /// </summary>
+    public async Task<List<TelegramContactResponse>> GetRecentContactsAsync(
+        string userId, 
+        string sessionId, 
+        bool forceRefresh = false, 
+        CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"[DEBUG] Получение последних контактов для UserId: {userId}, SessionId: {sessionId}, ForceRefresh: {forceRefresh}");
+        
+        // Используем менеджер сессий для получения/создания сессии
+        var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+        if (session == null)
+        {
+            Console.WriteLine("[DEBUG] Сессия не найдена");
+            throw new Exception("Сессия не найдена или истекла");
+        }
+        
+        // Проверяем статус авторизации
+        if (session.Status != TelegramLoginStatus.Success)
+        {
+            Console.WriteLine($"[DEBUG] Сессия не авторизована. Статус: {session.Status}");
+            throw new Exception("Сессия не авторизована");
+        }
+
+        try
+        {
+            // Используем метод сессии для получения последних контактов
+            var contacts = await session.GetRecentContactsAsync(forceRefresh, cancellationToken);
+            Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} последних контактов");
+            return contacts;
+        }
+        catch (ObjectDisposedException)
+        {
+            Console.WriteLine("[DEBUG] Сессия была освобождена, пытаемся восстановить");
+            TelegramClientCache.RemoveSession(userId, sessionId);
+            
+            // Пытаемся восстановить сессию
+            session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
+            if (session == null)
+            {
+                Console.WriteLine("[DEBUG] Не удалось восстановить сессию");
+                throw new Exception("Не удалось восстановить сессию");
+            }
+            
+            // Повторяем попытку с новой сессией
+            var contacts = await session.GetRecentContactsAsync(forceRefresh, cancellationToken);
+            Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} последних контактов после восстановления сессии");
+            return contacts;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DEBUG] Неожиданная ошибка при получении контактов: {ex.Message}");
+            throw;
+        }
     }
 }
