@@ -11,6 +11,9 @@ using System.Collections.Concurrent;
 using System.IO;
 using TalkLens.Collector.Domain.Interfaces;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.DependencyInjection;
+using TalkLens.Collector.Domain.Models.Telegram;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -22,49 +25,170 @@ public class TelegramUpdateMonitorService : BackgroundService
     private readonly ILogger<TelegramUpdateMonitorService> _logger;
     private readonly RedisTelegramSessionCache _redisCache;
     private readonly ITelegramSubscriptionRepository _subscriptionRepository;
+    private readonly ITelegramMessageRepository _messageRepository;
     
     // Словарь для отслеживания подписанных клиентов
     private readonly ConcurrentDictionary<string, bool> _subscribedClients = new();
+    private readonly ConcurrentDictionary<string, TelegramSession> _activeSessions = new();
 
     public TelegramUpdateMonitorService(
         ILogger<TelegramUpdateMonitorService> logger,
         RedisTelegramSessionCache redisCache,
-        ITelegramSubscriptionRepository subscriptionRepository)
+        ITelegramSubscriptionRepository subscriptionRepository,
+        ITelegramMessageRepository messageRepository)
     {
         _logger = logger;
         _redisCache = redisCache;
         _subscriptionRepository = subscriptionRepository;
+        _messageRepository = messageRepository;
         
         _logger.LogInformation("TelegramUpdateMonitorService инициализирован");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("TelegramUpdateMonitorService запущен");
-        
-        while (!stoppingToken.IsCancellationRequested)
+        _logger.LogInformation("Служба мониторинга обновлений Telegram запущена");
+
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                // Подписываемся на обновления всех клиентов в кэше
-                SubscribeToAllClients();
-                
-                // Проверяем каждые 5 минут для подписки на новые клиенты
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Нормальное завершение при остановке сервиса
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка в TelegramUpdateMonitorService: {ErrorMessage}", ex.Message);
-                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                try
+                {
+                    // Подписываемся на обновления всех клиентов в кэше
+                    SubscribeToAllClients();
+                    
+                    // Проверяем каждые 5 минут для подписки на новые клиенты
+                    await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Ошибка в TelegramUpdateMonitorService: {ErrorMessage}", ex.Message);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Нормальное завершение при остановке сервиса
+        }
         
-        _logger.LogInformation("TelegramUpdateMonitorService остановлен");
+        _logger.LogInformation("Служба мониторинга обновлений Telegram остановлена");
+    }
+
+    /// <summary>
+    /// Обрабатывает новое сообщение или редактирование сообщения
+    /// </summary>
+    private void ProcessNewMessage(string clientInfo, string sessionId, MessageBase messageBase, bool isEdit)
+    {
+        try
+        {
+            // Выводим отладочную информацию
+            _logger.LogDebug("Поиск сессии для {SessionId}. Активных сессий: {Count}", 
+                sessionId, _activeSessions.Count);
+                
+            foreach (var pair in _activeSessions)
+            {
+                _logger.LogDebug("Активная сессия: Ключ = {Key}, Путь к файлу = {FilePath}, Извлеченный ID = {ExtractedId}", 
+                    pair.Key, 
+                    pair.Value.GetSessionFilePath(),
+                    Path.GetFileNameWithoutExtension(Path.GetFileName(pair.Value.GetSessionFilePath())));
+            }
+            
+            // Сначала попробуем найти сессию по ключу
+            TelegramSession? session = null;
+            if (_activeSessions.ContainsKey(sessionId))
+            {
+                session = _activeSessions[sessionId];
+                _logger.LogDebug("Сессия найдена по прямому ключу {SessionId}", sessionId);
+            }
+            else
+            {
+                // Если не нашли по ключу, попробуем поискать по пути к файлу
+                session = _activeSessions.Values.FirstOrDefault(s => 
+                    Path.GetFileNameWithoutExtension(Path.GetFileName(s.GetSessionFilePath())).EndsWith(sessionId));
+                    
+                if (session != null)
+                {
+                    _logger.LogDebug("Сессия найдена по окончанию имени файла {SessionId}", sessionId);
+                }
+                else
+                {
+                    // Если не нашли и по окончанию имени файла, попробуем найти по любому совпадению
+                    session = _activeSessions.Values.FirstOrDefault(s => 
+                        s.GetSessionFilePath().Contains(sessionId));
+                        
+                    if (session != null)
+                    {
+                        _logger.LogDebug("Сессия найдена по частичному совпадению в пути к файлу {SessionId}", sessionId);
+                    }
+                }
+            }
+            
+            // Обработка разных типов сообщений
+            if (messageBase is Message message)
+            {
+                if (session != null)
+                {
+                    var myId = session.GetTelegramUserId();
+                    var fromId = message.from_id?.ID ?? myId;
+                    var chatId = message.peer_id?.ID ?? 0;
+                
+                    // Проверяем, есть ли подписка на данного отправителя по sessionId и interlocutorId
+                    var hasSubscription = _subscriptionRepository.ExistsAnySubscriptionAsync(
+                        sessionId, 
+                        chatId, 
+                        CancellationToken.None).GetAwaiter().GetResult();
+                
+                    // Если нет подписки, не обрабатываем сообщение
+                    if (!hasSubscription)
+                    {
+                        _logger.LogDebug(
+                            "Пропущено сообщение от {FromId}, т.к. нет подписки. Сессия: {SessionId}", 
+                            fromId, sessionId);
+                        return;
+                    }
+                
+                    try
+                    {
+                        var userId = session.GetUserId();
+                        var messageData = new TelegramMessageData
+                        {
+                            UserId = userId,
+                            SessionId = sessionId,
+                            TelegramUserId = myId,
+                            TelegramInterlocutorId = chatId,
+                            SenderId = fromId,
+                            MessageTime = message.Date
+                        };
+                    
+                        _messageRepository.SaveMessageAsync(messageData, CancellationToken.None)
+                            .GetAwaiter().GetResult();
+                        _logger.LogDebug("Сохранены метаданные о сообщении с данными из сессии: session {SessionId}, собеседник {InterlocutorId}",
+                            sessionId, chatId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Ошибка при сохранении метаданных о сообщении");
+                    }
+                }
+            }
+            
+            // Логируем сообщение
+            LogMessageUpdate(clientInfo, messageBase, isEdit);
+            
+            // Если сессия не найдена, логируем предупреждение после обработки сообщения
+            if (session == null)
+            {
+                _logger.LogWarning("Не удалось найти активную сессию для {SessionId}, но сообщение обработано", sessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при проверке подписки на сообщение: {ErrorMessage}", ex.Message);
+            // В случае ошибки всё равно логируем сообщение
+            LogMessageUpdate(clientInfo, messageBase, isEdit);
+        }
     }
 
     /// <summary>
@@ -80,6 +204,50 @@ public class TelegramUpdateMonitorService : BackgroundService
         foreach (var session in sessions)
         {
             string cacheKey = $"{session.Key}";
+            
+            try
+            {
+                // Добавляем сессию в словарь активных сессий по оригинальному ключу
+                _activeSessions[cacheKey] = session.Value;
+                
+                // Если ключ содержит двоеточие (формат "UserId:SessionId"), 
+                // извлекаем SessionId после двоеточия
+                if (cacheKey.Contains(':'))
+                {
+                    string sessionId = cacheKey.Split(':').Last();
+                    _activeSessions[sessionId] = session.Value;
+                    _logger.LogDebug("Сессия добавлена с ключами {CacheKey} и {SessionId}", cacheKey, sessionId);
+                }
+                else
+                {
+                    _logger.LogDebug("Сессия добавлена только с ключом {CacheKey}", cacheKey);
+                }
+                
+                // Также пробуем получить sessionId из пути к файлу для дополнительной надежности
+                try {
+                    string filePath = session.Value.GetSessionFilePath();
+                    string fileName = Path.GetFileNameWithoutExtension(Path.GetFileName(filePath)); // Используем Path.GetFileName для кросс-платформенной работы
+                    
+                    // Если имя файла содержит подчеркивание (формат "UserId_SessionId")
+                    if (fileName.Contains('_'))
+                    {
+                        string fileSessionId = fileName.Split('_').Last();
+                        if (!_activeSessions.ContainsKey(fileSessionId))
+                        {
+                            _activeSessions[fileSessionId] = session.Value;
+                            _logger.LogDebug("Дополнительно сессия добавлена с ключом из имени файла {FileSessionId}", fileSessionId);
+                        }
+                    }
+                } catch (Exception fileEx) {
+                    _logger.LogWarning(fileEx, "Ошибка при обработке пути к файлу сессии, но продолжаем работу");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при извлечении sessionId из ключа кэша {CacheKey}", cacheKey);
+                // В случае ошибки всё равно добавляем по оригинальному ключу
+                _activeSessions[cacheKey] = session.Value;
+            }
             
             // Проверяем, подписаны ли мы уже на этого клиента
             if (!_subscribedClients.ContainsKey(cacheKey))
@@ -191,45 +359,6 @@ public class TelegramUpdateMonitorService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ошибка при обработке обновления: {ErrorMessage}", ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Обрабатывает новое сообщение или редактирование сообщения
-    /// </summary>
-    private void ProcessNewMessage(string clientInfo, string sessionId, MessageBase messageBase, bool isEdit)
-    {
-        try
-        {
-            // Проверяем, является ли сообщение от другого пользователя
-            if (messageBase is Message message && message.from_id != null)
-            {
-                var fromId = message.from_id.ID;
-                
-                // Проверяем, есть ли подписка на данного отправителя по sessionId и interlocutorId
-                var hasSubscription = _subscriptionRepository.ExistsAnySubscriptionAsync(
-                    sessionId, 
-                    fromId, 
-                    CancellationToken.None).GetAwaiter().GetResult();
-                
-                // Если нет подписки, не обрабатываем сообщение
-                if (!hasSubscription)
-                {
-                    _logger.LogDebug(
-                        "Пропущено сообщение от {FromId}, т.к. нет подписки. Сессия: {SessionId}", 
-                        fromId, sessionId);
-                    return;
-                }
-            }
-            
-            // Логируем сообщение
-            LogMessageUpdate(clientInfo, messageBase, isEdit);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка при проверке подписки на сообщение: {ErrorMessage}", ex.Message);
-            // В случае ошибки всё равно логируем сообщение
-            LogMessageUpdate(clientInfo, messageBase, isEdit);
         }
     }
 

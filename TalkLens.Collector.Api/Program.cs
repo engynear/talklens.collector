@@ -176,8 +176,10 @@ builder.Services.AddHostedService<TelegramUpdateMonitorService>();
 // Регистрация сервиса сбора сообщений Telegram
 builder.Services.AddHostedService<TelegramMessageCollectorService>();
 
+// Регистрация репозиториев
 builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
 builder.Services.AddScoped<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
+builder.Services.AddScoped<ITelegramMessageRepository, TelegramMessageRepository>();
 
 var app = builder.Build();
 

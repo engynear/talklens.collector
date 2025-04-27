@@ -98,10 +98,13 @@ public class TelegramSession : IDisposable
         _updateHandler = null;
     }
 
-    public long GetUserId()
+    public long GetTelegramUserId()
     {
         return _user?.id ?? 0;
     }
+
+    public string GetUserId()
+        => _userId;
 
     /// <summary>
     /// Создает новую сессию Telegram без лимитера и кэша (для обратной совместимости)
