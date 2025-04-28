@@ -351,4 +351,36 @@ public class RedisTelegramSessionCache
     /// Получает ключ для локального хранилища сессий
     /// </summary>
     private string GetLocalKey(string userId, string sessionId) => $"{userId}:{sessionId}";
+
+    /// <summary>
+    /// Устанавливает время жизни (экспирации) сессии в Redis
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="expiryTime">Время до истечения сессии</param>
+    public void SetSessionExpiry(string userId, string sessionId, TimeSpan expiryTime)
+    {
+        try
+        {
+            var key = userId + "_" + sessionId;
+            var redisKey = key.ToString();
+            
+            if (_db.KeyExists(redisKey))
+            {
+                _db.KeyExpire(redisKey, expiryTime);
+                _logger.LogDebug("Установлено время жизни {Expiry} для сессии {UserId}:{SessionId}", 
+                    expiryTime, userId, sessionId);
+            }
+            else
+            {
+                _logger.LogWarning("Попытка установить время жизни для несуществующей сессии {UserId}:{SessionId}", 
+                    userId, sessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Ошибка при установке времени жизни для сессии {UserId}:{SessionId}", 
+                userId, sessionId);
+        }
+    }
 } 

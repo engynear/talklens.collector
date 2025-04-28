@@ -10,20 +10,21 @@ namespace TalkLens.Collector.Infrastructure.Repositories;
 /// </summary>
 public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
 {
-    private readonly TalkLensDbContext _db;
+    private readonly Func<TalkLensDbContext> _dbFactory;
 
-    public TelegramSubscriptionRepository(TalkLensDbContext db)
+    public TelegramSubscriptionRepository(Func<TalkLensDbContext> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     /// <inheritdoc />
     public async Task<TelegramSubscriptionData> AddSubscriptionAsync(TelegramSubscriptionData subscription, CancellationToken cancellationToken)
     {
+        using var db = _dbFactory();
         var entity = MapToEntity(subscription);
         entity.CreatedAt = DateTime.UtcNow;
         
-        await _db.InsertAsync(entity, token: cancellationToken);
+        await db.InsertAsync(entity, token: cancellationToken);
         subscription.Id = entity.Id;
         subscription.CreatedAt = entity.CreatedAt;
         
@@ -33,7 +34,8 @@ public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
     /// <inheritdoc />
     public async Task<bool> RemoveSubscriptionAsync(string userId, string sessionId, long interlocutorId, CancellationToken cancellationToken)
     {
-        int deleted = await _db.TelegramSubscriptions
+        using var db = _dbFactory();
+        int deleted = await db.TelegramSubscriptions
             .Where(s => s.UserId == userId && 
                       s.SessionId == sessionId && 
                       s.TelegramInterlocutorId == interlocutorId)
@@ -45,7 +47,8 @@ public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
     /// <inheritdoc />
     public async Task<bool> ExistsSubscriptionAsync(string userId, string sessionId, long interlocutorId, CancellationToken cancellationToken)
     {
-        return await _db.TelegramSubscriptions
+        using var db = _dbFactory();
+        return await db.TelegramSubscriptions
             .AnyAsync(s => s.UserId == userId && 
                          s.SessionId == sessionId && 
                          s.TelegramInterlocutorId == interlocutorId, 
@@ -55,7 +58,8 @@ public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
     /// <inheritdoc />
     public async Task<List<TelegramSubscriptionData>> GetSessionSubscriptionsAsync(string userId, string sessionId, CancellationToken cancellationToken)
     {
-        var entities = await _db.TelegramSubscriptions
+        using var db = _dbFactory();
+        var entities = await db.TelegramSubscriptions
             .Where(s => s.UserId == userId && s.SessionId == sessionId)
             .ToListAsync(cancellationToken);
 
@@ -65,7 +69,8 @@ public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
     /// <inheritdoc />
     public async Task<bool> ExistsAnySubscriptionAsync(string sessionId, long interlocutorId, CancellationToken cancellationToken)
     {
-        return await _db.TelegramSubscriptions
+        using var db = _dbFactory();
+        return await db.TelegramSubscriptions
             .AnyAsync(s => s.SessionId == sessionId && 
                          s.TelegramInterlocutorId == interlocutorId, 
                          cancellationToken);
@@ -74,7 +79,8 @@ public class TelegramSubscriptionRepository : ITelegramSubscriptionRepository
     /// <inheritdoc />
     public async Task<List<TelegramSubscriptionData>> GetAllSessionSubscriptionsAsync(string sessionId, CancellationToken cancellationToken)
     {
-        var entities = await _db.TelegramSubscriptions
+        using var db = _dbFactory();
+        var entities = await db.TelegramSubscriptions
             .Where(s => s.SessionId == sessionId)
             .ToListAsync(cancellationToken);
 

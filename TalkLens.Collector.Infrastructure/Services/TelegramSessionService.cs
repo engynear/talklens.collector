@@ -17,7 +17,7 @@ public class TelegramSessionService : ITelegramSessionService
     private readonly ITelegramSessionRepository _sessionRepository;
     private readonly ITelegramSubscriptionRepository _subscriptionRepository;
     private readonly TelegramSessionManager _sessionManager;
-    private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan SessionTimeout = TimeSpan.FromMinutes(15);
 
     public TelegramSessionService(
         RedisTelegramSessionCache redisCache, 
@@ -43,7 +43,16 @@ public class TelegramSessionService : ITelegramSessionService
         {
             try 
             {
-                // Для сессии из Redis всегда проверяем авторизацию
+                // Проверяем статус сессии перед валидацией
+                // Не выполняем валидацию, если требуется код подтверждения или 2FA
+                if (globalSession.Status == TelegramLoginStatus.VerificationCodeRequired || 
+                    globalSession.Status == TelegramLoginStatus.TwoFactorRequired)
+                {
+                    Console.WriteLine($"[DEBUG] Redis session is in {globalSession.Status} state, skipping validation");
+                    return globalSession;
+                }
+                
+                // Для сессии из Redis проверяем авторизацию только если она должна быть уже авторизована
                 if (await globalSession.ValidateSessionAsync())
                 {
                     Console.WriteLine("[DEBUG] Redis session is valid");
@@ -114,8 +123,7 @@ public class TelegramSessionService : ITelegramSessionService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[DEBUG] Error creating session from DB: {ex.Message}");
-            await _sessionRepository.UpdateSessionStatusAsync(userId, sessionId, false, cancellationToken);
+            Console.WriteLine($"[DEBUG] Error creating session from DB data: {ex.Message}");
             return null;
         }
     }
@@ -351,9 +359,10 @@ public class TelegramSessionService : ITelegramSessionService
     public async Task<List<TelegramContactResponse>> GetContactsAsync(
         string userId, 
         string sessionId,
-        CancellationToken cancellationToken)
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default)
     {
-        Console.WriteLine($"[DEBUG] Получение контактов для UserId: {userId}, SessionId: {sessionId}");
+        Console.WriteLine($"[DEBUG] Получение контактов для UserId: {userId}, SessionId: {sessionId}, ForceRefresh: {forceRefresh}");
         
         // Используем менеджер сессий для получения/создания сессии
         var session = await GetOrRestoreSessionAsync(userId, sessionId, cancellationToken);
@@ -372,8 +381,8 @@ public class TelegramSessionService : ITelegramSessionService
 
         try
         {
-            // Используем метод сессии для получения контактов
-            var contacts = await session.GetContactsAsync(false, cancellationToken);
+            // Используем метод сессии для получения контактов, передавая параметр forceRefresh
+            var contacts = await session.GetContactsAsync(forceRefresh, cancellationToken);
             Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} контактов");
             return contacts;
         }
@@ -391,7 +400,7 @@ public class TelegramSessionService : ITelegramSessionService
             }
             
             // Повторяем попытку с новой сессией
-            var contacts = await session.GetContactsAsync(false, cancellationToken);
+            var contacts = await session.GetContactsAsync(forceRefresh, cancellationToken);
             Console.WriteLine($"[DEBUG] Успешно получено {contacts.Count()} контактов после восстановления сессии");
             return contacts;
         }
@@ -419,15 +428,24 @@ public class TelegramSessionService : ITelegramSessionService
 
     private string GetCacheKey(string userId, string sessionId) => $"{userId}_{sessionId}";
 
+    /// <summary>
+    /// Обрабатывает ответ процесса авторизации
+    /// </summary>
     private async Task<TelegramLoginStatus> HandleLoginResponseAsync(TelegramSession session, string loginResponse)
     {
         switch (loginResponse)
         {
             case "verification_code":
                 await session.SetStatusAsync(TelegramLoginStatus.VerificationCodeRequired);
+                // Устанавливаем время жизни сессии в Redis при необходимости ввода кода
+                _redisCache.SetSessionExpiry(session.GetUserId(), session.GetSessionId(), SessionTimeout);
+                Console.WriteLine($"[DEBUG] Set session expiry to {SessionTimeout.TotalMinutes} minutes for verification");
                 break;
             case "password":
                 await session.SetStatusAsync(TelegramLoginStatus.TwoFactorRequired);
+                // Устанавливаем время жизни сессии в Redis при необходимости ввода 2FA
+                _redisCache.SetSessionExpiry(session.GetUserId(), session.GetSessionId(), SessionTimeout);
+                Console.WriteLine($"[DEBUG] Set session expiry to {SessionTimeout.TotalMinutes} minutes for 2FA");
                 break;
             case "":
             case null:

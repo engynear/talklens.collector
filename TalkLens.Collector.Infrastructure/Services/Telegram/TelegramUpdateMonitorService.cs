@@ -14,6 +14,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using TalkLens.Collector.Domain.Models.Telegram;
+using TalkLens.Collector.Infrastructure.Database;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -26,6 +27,7 @@ public class TelegramUpdateMonitorService : BackgroundService
     private readonly RedisTelegramSessionCache _redisCache;
     private readonly ITelegramSubscriptionRepository _subscriptionRepository;
     private readonly ITelegramMessageRepository _messageRepository;
+    private readonly RedisMessageQueueService _messageQueueService;
     
     // Словарь для отслеживания подписанных клиентов
     private readonly ConcurrentDictionary<string, bool> _subscribedClients = new();
@@ -35,12 +37,14 @@ public class TelegramUpdateMonitorService : BackgroundService
         ILogger<TelegramUpdateMonitorService> logger,
         RedisTelegramSessionCache redisCache,
         ITelegramSubscriptionRepository subscriptionRepository,
-        ITelegramMessageRepository messageRepository)
+        ITelegramMessageRepository messageRepository,
+        RedisMessageQueueService messageQueueService)
     {
         _logger = logger;
         _redisCache = redisCache;
         _subscriptionRepository = subscriptionRepository;
         _messageRepository = messageRepository;
+        _messageQueueService = messageQueueService;
         
         _logger.LogInformation("TelegramUpdateMonitorService инициализирован");
     }
@@ -83,17 +87,9 @@ public class TelegramUpdateMonitorService : BackgroundService
     {
         try
         {
-            // Выводим отладочную информацию
-            _logger.LogDebug("Поиск сессии для {SessionId}. Активных сессий: {Count}", 
+            // Выводим отладочную информацию на уровне Trace, чтобы не засорять логи в продакшене
+            _logger.LogTrace("Поиск сессии для {SessionId}. Активных сессий: {Count}", 
                 sessionId, _activeSessions.Count);
-                
-            foreach (var pair in _activeSessions)
-            {
-                _logger.LogDebug("Активная сессия: Ключ = {Key}, Путь к файлу = {FilePath}, Извлеченный ID = {ExtractedId}", 
-                    pair.Key, 
-                    pair.Value.GetSessionFilePath(),
-                    Path.GetFileNameWithoutExtension(Path.GetFileName(pair.Value.GetSessionFilePath())));
-            }
             
             // Сначала попробуем найти сессию по ключу
             TelegramSession? session = null;
@@ -130,8 +126,9 @@ public class TelegramUpdateMonitorService : BackgroundService
             {
                 if (session != null)
                 {
-                    var myId = session.GetTelegramUserId();
-                    var fromId = message.from_id?.ID ?? myId;
+                    // GetUserId возвращает string, a нам нужен long для TelegramUserId
+                    var telegramUserId = session.GetTelegramUserId(); // Этот метод возвращает long
+                    var fromId = message.from_id?.ID ?? telegramUserId;
                     var chatId = message.peer_id?.ID ?? 0;
                 
                     // Проверяем, есть ли подписка на данного отправителя по sessionId и interlocutorId
@@ -151,25 +148,32 @@ public class TelegramUpdateMonitorService : BackgroundService
                 
                     try
                     {
+                        var sessionFilePath = session.GetSessionFilePath();
                         var userId = session.GetUserId();
-                        var messageData = new TelegramMessageData
+                        
+                        // Создаем сущность сообщения для добавления в очередь
+                        var messageEntity = new TelegramMessageEntity
                         {
                             UserId = userId,
                             SessionId = sessionId,
-                            TelegramUserId = myId,
+                            TelegramUserId = telegramUserId, // Используем telegramUserId типа long
                             TelegramInterlocutorId = chatId,
                             SenderId = fromId,
                             MessageTime = message.Date
                         };
-                    
-                        _messageRepository.SaveMessageAsync(messageData, CancellationToken.None)
-                            .GetAwaiter().GetResult();
-                        _logger.LogDebug("Сохранены метаданные о сообщении с данными из сессии: session {SessionId}, собеседник {InterlocutorId}",
+                        
+                        // Формируем ключ сессии для очереди
+                        string sessionKey = $"{userId}_{sessionId}";
+                        
+                        // Добавляем сообщение в очередь Redis вместо TelegramMessageCollectorService
+                        _messageQueueService.EnqueueMessageAsync(messageEntity, sessionKey).GetAwaiter().GetResult();
+                        
+                        _logger.LogDebug("Сообщение добавлено в очередь Redis для последующего сохранения: session {SessionId}, собеседник {InterlocutorId}",
                             sessionId, chatId);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Ошибка при сохранении метаданных о сообщении");
+                        _logger.LogError(ex, "Ошибка при добавлении сообщения в очередь Redis");
                     }
                 }
             }

@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.415.18" />
+    <PackageReference Include="Confluent.Kafka" Version="2.10.0" />
     <PackageReference Include="linq2db" Version="5.4.1" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.3" />
@@ -15,6 +16,7 @@
     <PackageReference Include="Minio" Version="6.0.4" />
     <PackageReference Include="Npgsql" Version="8.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.31" />
+    <PackageReference Include="System.Text.Json" Version="9.0.4" />
     <PackageReference Include="WTelegramClient" Version="4.3.2" />
   </ItemGroup>
 

@@ -70,38 +70,46 @@ public class  TelegramApiCache
     /// <returns>Результат из кэша или вызова фабрики</returns>
     public async Task<T> GetOrCreateAsync<T>(string methodName, Func<Task<T>> factory, bool forceRefresh = false, params object[] args)
     {
-        string cacheKey = GenerateCacheKey(methodName, args);
+        var cacheKey = GenerateCacheKey(methodName, args);
         
-        // Если запрошено принудительное обновление, удаляем существующее значение
+        // Если требуется принудительное обновление, пропускаем кэш
         if (forceRefresh)
         {
-            _cache.Remove(cacheKey);
-            _logger.LogDebug("Принудительное обновление кэша для метода {Method}", methodName);
-        }
-        
-        // Получаем время жизни для метода
-        var expiration = _methodExpiration.GetValueOrDefault(methodName, _defaultExpiration);
-        
-        try
-        {
-            // Используем GetOrCreateAsync с заданным временем жизни
-            return await _cache.GetOrCreateAsync(cacheKey, async entry =>
-            {
-                entry.SetAbsoluteExpiration(expiration);
-                
-                _logger.LogDebug("Кэш-промах для метода {Method}, выполнение запроса", methodName);
-                var result = await factory();
-                
-                return result;
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Ошибка при работе с кэшем для метода {Method}: {Error}", methodName, ex.Message);
+            _logger.LogDebug("Принудительное обновление для {MethodName}", methodName);
+            Console.WriteLine($"[DEBUG] {methodName}: Force refresh requested, skipping cache");
             
-            // В случае ошибки кэширования, просто выполняем запрос напрямую
-            return await factory();
+            // Получаем значение через фабрику
+            var freshResult = await factory();
+            
+            // Обновляем кэш
+            TimeSpan expirationTime = _methodExpiration.TryGetValue(methodName, out var expTime) ? expTime : _defaultExpiration;
+            var cacheOptions = new MemoryCacheEntryOptions().SetAbsoluteExpiration(expirationTime);
+            _cache.Set(cacheKey, freshResult, cacheOptions);
+            
+            return freshResult;
         }
+        
+        // Проверяем наличие в кэше
+        if (_cache.TryGetValue(cacheKey, out T cachedResult))
+        {
+            _logger.LogDebug("Кэш найден для {MethodName}", methodName);
+            Console.WriteLine($"[DEBUG] {methodName}: Cache HIT, returning cached value");
+            return cachedResult;
+        }
+        
+        // Если значения нет в кэше, получаем через фабрику
+        _logger.LogDebug("Кэш не найден для {MethodName}, выполняется запрос", methodName);
+        Console.WriteLine($"[DEBUG] {methodName}: Cache MISS, executing factory");
+        
+        // Получаем значение через фабрику
+        var result = await factory();
+        
+        // Сохраняем в кэш
+        TimeSpan expiration = _methodExpiration.TryGetValue(methodName, out var exp) ? exp : _defaultExpiration;
+        var options = new MemoryCacheEntryOptions().SetAbsoluteExpiration(expiration);
+        _cache.Set(cacheKey, result, options);
+        
+        return result;
     }
     
     /// <summary>

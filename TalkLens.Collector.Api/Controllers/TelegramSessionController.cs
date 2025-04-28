@@ -169,6 +169,7 @@ public class TelegramSessionController : BaseApiController
             var contacts = await _telegramSessionService.GetContactsAsync(
                 userId, 
                 sessionId,
+                forceRefresh,
                 cancellationToken);
                 
             return Ok(contacts);

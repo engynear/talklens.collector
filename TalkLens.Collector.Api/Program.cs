@@ -57,7 +57,17 @@ builder.Services.AddSwaggerGen(options =>
 
 // Настройка подключения к БД
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
-builder.Services.AddScoped<TalkLensDbContext>(sp => new TalkLensDbContext(connectionString));
+// Удаляем старую регистрацию:
+// builder.Services.AddScoped<TalkLensDbContext>(sp => new TalkLensDbContext(connectionString));
+// builder.Services.AddSingleton<Func<TalkLensDbContext>>(sp =>
+// {
+//     var provider = sp;
+//     return () => provider.GetRequiredService<TalkLensDbContext>();
+// });
+
+// Оставляем только фабрику:
+builder.Services.AddTransient<Func<TalkLensDbContext>>(_ =>
+    () => new TalkLensDbContext(connectionString));
 
 // Настройка JWT аутентификации
 builder.Services.AddAuthentication(options =>
@@ -173,13 +183,17 @@ builder.Services.AddScoped<ISessionService>(provider =>
 // Регистрация сервиса мониторинга обновлений Telegram
 builder.Services.AddHostedService<TelegramUpdateMonitorService>();
 
-// Регистрация сервиса сбора сообщений Telegram
-builder.Services.AddHostedService<TelegramMessageCollectorService>();
+// Регистрация сервиса очереди сообщений в Redis
+builder.Services.AddSingleton<RedisMessageQueueService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<RedisMessageQueueService>());
 
 // Регистрация репозиториев
 builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
 builder.Services.AddScoped<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
 builder.Services.AddScoped<ITelegramMessageRepository, TelegramMessageRepository>();
+
+// Регистрация сервисов метрик
+builder.Services.AddScoped<IChatMetricsService, ChatMetricsService>();
 
 var app = builder.Build();
 

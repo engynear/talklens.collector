@@ -36,4 +36,66 @@ public interface ITelegramMessageRepository
         string sessionId, 
         long interlocutorId, 
         CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Получает количество сообщений пользователя для указанной сессии и собеседника
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор собеседника</param>
+    /// <param name="telegramUserId">Идентификатор пользователя Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Количество сообщений пользователя</returns>
+    Task<int> GetUserMessageCountAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        long telegramUserId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Получает количество сообщений собеседника для указанной сессии и собеседника
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор собеседника</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Количество сообщений собеседника</returns>
+    Task<int> GetInterlocutorMessageCountAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Получает среднее время ответа пользователя для указанной сессии и собеседника
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор собеседника</param>
+    /// <param name="telegramUserId">Идентификатор пользователя Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Среднее время ответа пользователя в секундах</returns>
+    Task<double> GetUserAverageResponseTimeAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        long telegramUserId,
+        CancellationToken cancellationToken);
+        
+    /// <summary>
+    /// Получает среднее время ответа собеседника для указанной сессии и собеседника
+    /// </summary>
+    /// <param name="userId">Идентификатор пользователя</param>
+    /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="interlocutorId">Идентификатор собеседника</param>
+    /// <param name="telegramUserId">Идентификатор пользователя Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Среднее время ответа собеседника в секундах</returns>
+    Task<double> GetInterlocutorAverageResponseTimeAsync(
+        string userId,
+        string sessionId,
+        long interlocutorId,
+        long telegramUserId,
+        CancellationToken cancellationToken);
 } 

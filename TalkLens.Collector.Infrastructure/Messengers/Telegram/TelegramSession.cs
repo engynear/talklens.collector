@@ -47,6 +47,16 @@ public class TelegramSession : IDisposable
     /// </summary>
     public string GetUpdatesFilePath() => _updatesFilePath;
 
+    /// <summary>
+    /// Возвращает идентификатор пользователя для этой сессии
+    /// </summary>
+    public string GetUserId() => _userId;
+    
+    /// <summary>
+    /// Возвращает идентификатор сессии
+    /// </summary>
+    public string GetSessionId() => _sessionId;
+
     public void SubscribeToUpdates(EventHandler<IObject> handler)
     {
         UnsubscribeFromUpdates();
@@ -102,9 +112,6 @@ public class TelegramSession : IDisposable
     {
         return _user?.id ?? 0;
     }
-
-    public string GetUserId()
-        => _userId;
 
     /// <summary>
     /// Создает новую сессию Telegram без лимитера и кэша (для обратной совместимости)
@@ -365,10 +372,13 @@ public class TelegramSession : IDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+
+        Console.WriteLine($"[DEBUG] Executing API method: {methodName}, Force refresh: {forceRefresh}, Args: {(args != null ? string.Join(",", args) : "none")}");
         
         // Функция, которая выполняет метод с учетом рейт-лимита
         async Task<T> ExecuteWithRateLimit()
         {
+            Console.WriteLine($"[DEBUG] {methodName}: Executing direct API request (not from cache)");
             if (_rateLimiter != null)
             {
                 // Используем рейт-лимитер для ограничения запросов
@@ -384,6 +394,7 @@ public class TelegramSession : IDisposable
         // Решаем, применять ли кэширование
         if (_apiCache != null && args != null)
         {
+            Console.WriteLine($"[DEBUG] {methodName}: API cache is available, trying to use cache");
             // Используем кэш для запроса
             return await _apiCache.GetOrCreateAsync(
                 methodName,
@@ -393,6 +404,11 @@ public class TelegramSession : IDisposable
         }
         else
         {
+            if (_apiCache == null)
+                Console.WriteLine($"[DEBUG] {methodName}: API cache is NULL, executing direct request");
+            else if (args == null)
+                Console.WriteLine($"[DEBUG] {methodName}: Args are NULL, executing direct request");
+                
             // Если кэш не предоставлен или аргументы отсутствуют, просто выполняем запрос
             return await ExecuteWithRateLimit();
         }

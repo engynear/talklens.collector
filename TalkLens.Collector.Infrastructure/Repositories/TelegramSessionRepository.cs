@@ -7,34 +7,36 @@ namespace TalkLens.Collector.Infrastructure.Repositories;
 
 public class TelegramSessionRepository : ITelegramSessionRepository
 {
-    private readonly TalkLensDbContext _db;
+    private readonly Func<TalkLensDbContext> _dbFactory;
 
-    public TelegramSessionRepository(TalkLensDbContext db)
+    public TelegramSessionRepository(Func<TalkLensDbContext> dbFactory)
     {
-        _db = db;
+        _dbFactory = dbFactory;
     }
 
     public async Task<TelegramSessionData?> GetActiveSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
     {
-        var entity = await _db.TelegramSessions
+        using var db = _dbFactory();
+        var entity = await db.TelegramSessions
             .FirstOrDefaultAsync(s => s.UserId == userId && 
                                     s.SessionId == sessionId && 
                                     s.IsActive, 
                                     cancellationToken);
-
         return entity == null ? null : MapToData(entity);
     }
 
     public async Task<TelegramSessionData> SaveSessionAsync(TelegramSessionData session, CancellationToken cancellationToken)
     {
+        using var db = _dbFactory();
         var entity = MapToEntity(session);
-        await _db.InsertAsync(entity, token: cancellationToken);
+        await db.InsertAsync(entity, token: cancellationToken);
         return session;
     }
 
     public async Task UpdateSessionStatusAsync(string userId, string sessionId, bool isActive, CancellationToken cancellationToken)
     {
-        await _db.TelegramSessions
+        using var db = _dbFactory();
+        await db.TelegramSessions
             .Where(s => s.UserId == userId && s.SessionId == sessionId)
             .Set(s => s.IsActive, isActive)
             .Set(s => s.LastActivityAt, DateTime.UtcNow)
@@ -43,22 +45,24 @@ public class TelegramSessionRepository : ITelegramSessionRepository
 
     public async Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken)
     {
-        var entities = await _db.TelegramSessions
+        using var db = _dbFactory();
+        var entities = await db.TelegramSessions
             .Where(s => s.UserId == userId && s.IsActive)
             .ToListAsync(cancellationToken);
-
         return entities.Select(MapToData).ToList();
     }
     
     public async Task<bool> ExistsActiveSessionWithPhoneAsync(string phoneNumber, CancellationToken cancellationToken)
     {
-        return await _db.TelegramSessions
+        using var db = _dbFactory();
+        return await db.TelegramSessions
             .AnyAsync(s => s.PhoneNumber == phoneNumber && s.IsActive, cancellationToken);
     }
     
     public async Task<bool> DeleteSessionAsync(string userId, string sessionId, CancellationToken cancellationToken)
     {
-        int deleted = await _db.TelegramSessions
+        using var db = _dbFactory();
+        int deleted = await db.TelegramSessions
             .Where(s => s.UserId == userId && s.SessionId == sessionId)
             .DeleteAsync(cancellationToken);
             
@@ -67,7 +71,8 @@ public class TelegramSessionRepository : ITelegramSessionRepository
     
     public async Task<int> DeleteAllUserSessionsAsync(string userId, CancellationToken cancellationToken)
     {
-        return await _db.TelegramSessions
+        using var db = _dbFactory();
+        return await db.TelegramSessions
             .Where(s => s.UserId == userId)
             .DeleteAsync(cancellationToken);
     }

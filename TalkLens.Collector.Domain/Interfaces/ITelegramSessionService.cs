@@ -69,12 +69,14 @@ public interface ITelegramSessionService : ISessionService
     /// </summary>
     /// <param name="userId">Идентификатор пользователя</param>
     /// <param name="sessionId">Идентификатор сессии</param>
+    /// <param name="forceRefresh">Принудительное обновление кэша</param>
     /// <param name="cancellationToken">Токен отмены</param>
     /// <returns>Список контактов</returns>
     Task<List<TelegramContactResponse>> GetContactsAsync(
         string userId, 
         string sessionId,
-        CancellationToken cancellationToken);
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default);
         
     /// <summary>
     /// Получает объект сессии Telegram для доступа к API
