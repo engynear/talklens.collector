@@ -170,18 +170,24 @@ builder.Services.AddScoped<ITelegramSessionService, TelegramSessionService>();
 builder.Services.AddScoped<ISessionService>(provider => 
     provider.GetRequiredService<ITelegramSessionService>());
 
+// Меняем на Singleton
+builder.Services.AddSingleton<ITelegramSessionService, TelegramSessionService>();
+// Также регистрируем сервис как реализацию ISessionService для паттерна стратегия
+builder.Services.AddSingleton<ISessionService>(provider => 
+    provider.GetRequiredService<ITelegramSessionService>());
+
 // Регистрация сервиса мониторинга обновлений Telegram
 builder.Services.AddHostedService<TelegramUpdateMonitorService>();
 
 // Регистрация репозиториев
-builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
-builder.Services.AddScoped<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
-builder.Services.AddScoped<ITelegramMessageRepository, TelegramMessageRepository>();
-builder.Services.AddScoped<IChatMetricsHistoryRepository, ChatMetricsHistoryRepository>();
-builder.Services.AddScoped<ITelegramUserRecommendationRepository, TelegramUserRecommendationRepository>();
+builder.Services.AddSingleton<ITelegramSessionRepository, TelegramSessionRepository>();
+builder.Services.AddSingleton<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
+builder.Services.AddSingleton<ITelegramMessageRepository, TelegramMessageRepository>();
+builder.Services.AddSingleton<IChatMetricsHistoryRepository, ChatMetricsHistoryRepository>();
+builder.Services.AddSingleton<ITelegramUserRecommendationRepository, TelegramUserRecommendationRepository>();
 
 // Регистрация сервисов метрик
-builder.Services.AddScoped<IChatMetricsService, TelegramChatMetricsService>();
+builder.Services.AddSingleton<IChatMetricsService, TelegramChatMetricsService>();
 
 // Регистрация сервиса сбора сообщений
 builder.Services.AddSingleton<TelegramMessageCollectorService>();
