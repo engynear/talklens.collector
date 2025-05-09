@@ -1,6 +1,3 @@
-using System;
-using TalkLens.Collector.Domain.Models;
-
 namespace TalkLens.Collector.Domain.Models.Telegram;
 
 /// <summary>

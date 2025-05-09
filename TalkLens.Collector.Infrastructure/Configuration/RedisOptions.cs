@@ -1,5 +1,3 @@
-using System;
-
 namespace TalkLens.Collector.Infrastructure.Configuration;
 
 /// <summary>
@@ -21,6 +19,11 @@ public class RedisOptions
     /// Префикс ключа для хранения сессий Telegram
     /// </summary>
     public string KeyPrefix { get; set; } = "telegram:session:";
+    
+    /// <summary>
+    /// Префикс ключа для очереди сообщений
+    /// </summary>
+    public string MessageQueuePrefix { get; set; } = "telegram:message_queue:";
     
     /// <summary>
     /// Альтернативное имя свойства для обратной совместимости

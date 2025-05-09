@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Caching.Memory;
-using System;
-using System.Threading.Tasks;
 
 namespace TalkLens.Collector.Infrastructure.Cache.Memory;
 

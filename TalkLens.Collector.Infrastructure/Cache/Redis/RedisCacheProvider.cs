@@ -1,9 +1,8 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 namespace TalkLens.Collector.Infrastructure.Cache.Redis;
 
@@ -19,15 +18,15 @@ public class RedisCacheProvider<T> : ICacheProvider<T>
     
     public RedisCacheProvider(
         IConnectionMultiplexer redis, 
-        IConfiguration configuration,
+        IOptions<RedisOptions> redisOptions,
         ILogger<RedisCacheProvider<T>> logger)
     {
         _redis = redis;
         _db = redis.GetDatabase();
         _logger = logger;
         
-        // Получаем префикс для ключей из конфигурации
-        _keyPrefix = configuration["Redis:KeyPrefix"] ?? "talklens:";
+        // Получаем префикс для ключей из опций
+        _keyPrefix = redisOptions.Value.KeyPrefix;
     }
     
     /// <summary>

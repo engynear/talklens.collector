@@ -1,5 +1,3 @@
-using System;
-
 namespace TalkLens.Collector.Infrastructure.Cache;
 
 /// <summary>

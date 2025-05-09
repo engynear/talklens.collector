@@ -3,12 +3,6 @@ using TalkLens.Collector.Domain.Models.Telegram;
 using TalkLens.Collector.Infrastructure.Services.Telegram;
 using WTelegram;
 using TL;
-using System.IO;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Threading;
-using System.Linq;
 
 namespace TalkLens.Collector.Infrastructure.Messengers.Telegram;
 
@@ -23,12 +17,13 @@ public class TelegramSession : IDisposable
     private TelegramLoginStatus _status;
     private bool _disposed;
     private User? _user;
-    private UpdateManager? _updateManager;
-    
-    private string? _phone = null;
-    private string? _verificationCode = null;
-    private string? _twoFactorPassword = null;
+
+    private string? _phone;
+    private string? _verificationCode;
+    private string? _twoFactorPassword;
     private EventHandler<IObject>? _updateHandler;
+    private readonly string _apiId;
+    private readonly string _apiHash;
 
     // Добавляем поля для лимитера и кэша
     private readonly TelegramRateLimiter? _rateLimiter;
@@ -62,13 +57,10 @@ public class TelegramSession : IDisposable
         UnsubscribeFromUpdates();
         _updateHandler = handler;
         
-        _updateManager = _client.WithUpdateManager(
+        _client.WithUpdateManager(
             onUpdate: update => 
             {
-                if (_updateHandler != null)
-                {
-                    _updateHandler.Invoke(this, update);
-                }
+                _updateHandler?.Invoke(this, update);
                 return Task.CompletedTask;
             },
             statePath: _updatesFilePath
@@ -85,13 +77,10 @@ public class TelegramSession : IDisposable
         _updateHandler = handler;
         
         // Создаем UpdateManager без указания пути к файлу состояния
-        _updateManager = _client.WithUpdateManager(
+        _client.WithUpdateManager(
             onUpdate: update => 
             {
-                if (_updateHandler != null)
-                {
-                    _updateHandler.Invoke(this, update);
-                }
+                _updateHandler?.Invoke(this, update);
                 return Task.CompletedTask;
             }
         );
@@ -99,26 +88,12 @@ public class TelegramSession : IDisposable
 
     public void UnsubscribeFromUpdates()
     {
-        if (_updateManager != null)
-        {
-            // UpdateManager не имеет метода Dispose, просто обнуляем ссылку
-            // чтобы позволить GC собрать объект
-            _updateManager = null;
-        }
         _updateHandler = null;
     }
 
     public long GetTelegramUserId()
     {
         return _user?.id ?? 0;
-    }
-
-    /// <summary>
-    /// Создает новую сессию Telegram без лимитера и кэша (для обратной совместимости)
-    /// </summary>
-    public TelegramSession(string userId, string sessionId, string sessionFilePath, string updatesFilePath, string? phone = null)
-        : this(userId, sessionId, sessionFilePath, updatesFilePath, null, null, phone)
-    {
     }
 
     /// <summary>
@@ -131,7 +106,9 @@ public class TelegramSession : IDisposable
         string updatesFilePath, 
         TelegramRateLimiter? rateLimiter = null,
         TelegramApiCache? apiCache = null,
-        string? phone = null)
+        string? phone = null,
+        string apiId = "0",
+        string apiHash = "")
     {
         _userId = userId;
         _sessionId = sessionId;
@@ -140,6 +117,8 @@ public class TelegramSession : IDisposable
         _phone = phone;
         _rateLimiter = rateLimiter;
         _apiCache = apiCache;
+        _apiId = apiId;
+        _apiHash = apiHash;
         
         _status = File.Exists(sessionFilePath) ? TelegramLoginStatus.Success : TelegramLoginStatus.Pending;
         _disposed = false;
@@ -149,33 +128,28 @@ public class TelegramSession : IDisposable
 
     private void InitializeClient()
     {
-        // Проверяем, существует ли директория для файла сессии
         var directory = Path.GetDirectoryName(_sessionFilePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }
-
-        // Проверяем доступность файла сессии перед созданием клиента
+        
         if (File.Exists(_sessionFilePath))
         {
             try
             {
-                // Проверяем, не заблокирован ли файл
                 using var fs = new FileStream(_sessionFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
-                // Файл доступен, закрываем его
                 fs.Close();
             }
             catch (IOException)
             {
-                // Файл заблокирован или недоступен, удаляем его
                 try
                 {
                     File.Delete(_sessionFilePath);
                 }
                 catch
                 {
-                    // Игнорируем ошибки при удалении
+                    Console.WriteLine($"[ERROR] Не удалось удалить файл сессии: {_sessionFilePath}");
                 }
             }
         }
@@ -184,8 +158,8 @@ public class TelegramSession : IDisposable
         {
             return what switch
             {
-                "api_id" => "23252333",
-                "api_hash" => "2bfce46015419239292eeaed12562231",
+                "api_id" => _apiId,
+                "api_hash" => _apiHash,
                 "phone_number" => _phone,
                 "verification_code" => _verificationCode,
                 "password" => _twoFactorPassword,
@@ -325,7 +299,7 @@ public class TelegramSession : IDisposable
         try
         {
             UnsubscribeFromUpdates();
-            _client?.Dispose();
+            _client.Dispose();
         }
         catch
         {
@@ -434,14 +408,14 @@ public class TelegramSession : IDisposable
                 foreach (var dialog in dialogs.dialogs)
                 {
                     // Пропускаем все, кроме личных чатов
-                    if (dialog.Peer is not TL.PeerUser)
+                    if (dialog.Peer is not PeerUser peerUser)
                         continue;
 
-                    var userId = ((TL.PeerUser)dialog.Peer).user_id;
+                    var userId = peerUser.user_id;
                     var user = dialogs.users[userId];
                     
                     // Пропускаем ботов и удаленных пользователей
-                    if (user.flags.HasFlag(TL.User.Flags.bot) || user.flags.HasFlag(TL.User.Flags.deleted))
+                    if (user.flags.HasFlag(User.Flags.bot) || user.flags.HasFlag(User.Flags.deleted))
                         continue;
 
                     contacts.Add(new TelegramContactResponse
@@ -452,7 +426,7 @@ public class TelegramSession : IDisposable
                         Username = user.username,
                         Phone = user.phone,
                         HasPhoto = user.photo != null,
-                        LastSeen = user.status != null ? user.status.ToString() : null
+                        LastSeen = user.status?.ToString()
                     });
                 }
 
@@ -483,22 +457,22 @@ public class TelegramSession : IDisposable
                 foreach (var dialog in dialogs.dialogs)
                 {
                     // Пропускаем все, кроме личных чатов
-                    if (dialog.Peer is not TL.PeerUser)
+                    if (dialog.Peer is not PeerUser peerUser)
                         continue;
 
-                    var userId = ((TL.PeerUser)dialog.Peer).user_id;
+                    var userId = peerUser.user_id;
                     var user = dialogs.users[userId];
                     
                     // Пропускаем ботов и удаленных пользователей
-                    if (user.flags.HasFlag(TL.User.Flags.bot) || user.flags.HasFlag(TL.User.Flags.deleted))
+                    if (user.flags.HasFlag(User.Flags.bot) || user.flags.HasFlag(User.Flags.deleted))
                         continue;
 
                     // Получаем время последнего сообщения
                     DateTime lastMessageTime = DateTime.MinValue;
-                    if (dialog is TL.Dialog tlDialog && tlDialog.top_message != 0)
+                    if (dialog is Dialog tlDialog && tlDialog.top_message != 0)
                     {
                         var message = dialogs.messages.FirstOrDefault(m => m.ID == tlDialog.top_message);
-                        if (message != null && message is Message msg)
+                        if (message is Message msg)
                         {
                             lastMessageTime = msg.Date;
                         }
@@ -506,16 +480,7 @@ public class TelegramSession : IDisposable
 
                     contacts.Add(new TelegramContactWithLastMessage
                     {
-                        Contact = new TelegramContactResponse
-                        {
-                            Id = userId,
-                            FirstName = user.first_name ?? string.Empty,
-                            LastName = user.last_name,
-                            Username = user.username,
-                            Phone = user.phone,
-                            HasPhoto = user.photo != null,
-                            LastSeen = user.status != null ? user.status.ToString() : null
-                        },
+                        Contact = CreateContactResponse(userId, user),
                         LastMessageTime = lastMessageTime
                     });
                 }
@@ -530,6 +495,20 @@ public class TelegramSession : IDisposable
             forceRefresh,
             new object[] { "recent" },
             cancellationToken);
+    }
+
+    private TelegramContactResponse CreateContactResponse(long userId, User user)
+    {
+        return new TelegramContactResponse
+        {
+            Id = userId,
+            FirstName = user.first_name ?? string.Empty,
+            LastName = user.last_name,
+            Username = user.username,
+            Phone = user.phone,
+            HasPhoto = user.photo != null,
+            LastSeen = user.status?.ToString()
+        };
     }
 
     // Вспомогательный класс для сортировки контактов

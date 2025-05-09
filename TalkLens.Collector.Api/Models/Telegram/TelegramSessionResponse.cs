@@ -1,4 +1,3 @@
-using System;
 using TalkLens.Collector.Api.Models.Session;
 
 namespace TalkLens.Collector.Api.Models.Telegram;

@@ -1,8 +1,4 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TalkLens.Collector.Infrastructure.Configuration;
@@ -17,6 +13,8 @@ public class TelegramRateLimiter : IRateLimiter
     private readonly ILogger<TelegramRateLimiter> _logger;
     private readonly TelegramOptions _options;
     private readonly ConcurrentDictionary<string, Queue<DateTime>> _methodHistory = new();
+    private readonly TimeSpan _timeWindow;  // Окно времени для отслеживания запросов
+    private readonly int _maxRequests;      // Максимальное количество запросов в окне
 
     /// <summary>
     /// Инициализирует новый экземпляр класса <see cref="TelegramRateLimiter"/>
@@ -29,6 +27,10 @@ public class TelegramRateLimiter : IRateLimiter
     {
         _options = options.Value;
         _logger = logger;
+        
+        // Преобразуем новые настройки в формат, используемый в этом классе
+        _timeWindow = TimeSpan.FromMinutes(1); // Стандартное окно в 1 минуту
+        _maxRequests = _options.RateLimit.RequestsPerMinute; // Используем ограничение запросов в минуту
     }
 
     /// <inheritdoc/>
@@ -81,16 +83,16 @@ public class TelegramRateLimiter : IRateLimiter
         lock (queue)
         {
             // Удаляем старые записи старше TimeWindow
-            while (queue.Count > 0 && now - queue.Peek() > _options.RateLimit.TimeWindow)
+            while (queue.Count > 0 && now - queue.Peek() > _timeWindow)
             {
                 queue.Dequeue();
             }
             
             // Если достигли лимита, вычисляем задержку
-            if (queue.Count >= _options.RateLimit.MaxRequests)
+            if (queue.Count >= _maxRequests)
             {
                 var oldestCall = queue.Peek();
-                var timeToWait = _options.RateLimit.TimeWindow - (now - oldestCall);
+                var timeToWait = _timeWindow - (now - oldestCall);
                 
                 if (timeToWait > TimeSpan.Zero)
                 {

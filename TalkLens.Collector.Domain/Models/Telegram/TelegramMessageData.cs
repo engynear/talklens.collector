@@ -39,4 +39,9 @@ public class TelegramMessageData
     /// Время отправки сообщения
     /// </summary>
     public DateTime MessageTime { get; set; }
+    
+    /// <summary>
+    /// Текст сообщения (не сохраняется в базу данных, используется только для отправки в Kafka)
+    /// </summary>
+    public string? MessageText { get; set; }
 } 

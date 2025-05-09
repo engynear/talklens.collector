@@ -1,6 +1,4 @@
 using TalkLens.Collector.Domain.Models.Telegram;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace TalkLens.Collector.Domain.Interfaces;
 

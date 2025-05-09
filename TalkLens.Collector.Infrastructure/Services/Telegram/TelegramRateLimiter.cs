@@ -1,9 +1,7 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
-using System.Threading;
-using System.Threading.Tasks;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -24,33 +22,35 @@ public class TelegramRateLimiter
     // Лимиты для конкретных методов (если нужны специальные ограничения)
     private readonly ConcurrentDictionary<string, (int PerMinute, int PerHour, TimeSpan Cooldown)> _methodLimits = new();
 
-    public TelegramRateLimiter(IConfiguration configuration, ILogger<TelegramRateLimiter> logger)
+    public TelegramRateLimiter(IOptions<TelegramOptions> telegramOptions, ILogger<TelegramRateLimiter> logger)
     {
         _logger = logger;
         
-        // Загружаем настройки лимитов из конфигурации
-        _defaultRequestsPerMinute = configuration.GetValue<int>("Telegram:RateLimit:RequestsPerMinute", 20);
-        _defaultRequestsPerHour = configuration.GetValue<int>("Telegram:RateLimit:RequestsPerHour", 300);
-        int cooldownSeconds = configuration.GetValue<int>("Telegram:RateLimit:CooldownSeconds", 3);
-        _defaultCooldownPeriod = TimeSpan.FromSeconds(cooldownSeconds);
+        // Загружаем настройки лимитов из опций
+        var rateLimitOptions = telegramOptions.Value.RateLimit;
+        
+        _defaultRequestsPerMinute = rateLimitOptions.RequestsPerMinute;
+        _defaultRequestsPerHour = rateLimitOptions.RequestsPerHour;
+        _defaultCooldownPeriod = TimeSpan.FromSeconds(rateLimitOptions.CooldownSeconds);
         
         // Инициализируем специальные лимиты для конкретных методов
-        InitializeMethodLimits(configuration);
+        InitializeMethodLimits(rateLimitOptions);
         
         _logger.LogInformation("TelegramRateLimiter инициализирован. Стандартные лимиты: {PerMinute} запросов в минуту, {PerHour} запросов в час, период охлаждения {Cooldown} сек.", 
-            _defaultRequestsPerMinute, _defaultRequestsPerHour, cooldownSeconds);
+            _defaultRequestsPerMinute, _defaultRequestsPerHour, rateLimitOptions.CooldownSeconds);
     }
     
-    private void InitializeMethodLimits(IConfiguration configuration)
+    private void InitializeMethodLimits(RateLimitOptions rateLimitOptions)
     {
-        // Загружаем специальные лимиты для методов, если они заданы в конфигурации
-        var methodLimitsSection = configuration.GetSection("Telegram:RateLimit:MethodLimits");
-        foreach (var methodSection in methodLimitsSection.GetChildren())
+        // Загружаем специальные лимиты для методов из опций
+        foreach (var methodEntry in rateLimitOptions.MethodLimits)
         {
-            string methodName = methodSection.Key;
-            int perMinute = methodSection.GetValue<int>("RequestsPerMinute", _defaultRequestsPerMinute);
-            int perHour = methodSection.GetValue<int>("RequestsPerHour", _defaultRequestsPerHour);
-            int cooldownSeconds = methodSection.GetValue<int>("CooldownSeconds", (int)_defaultCooldownPeriod.TotalSeconds);
+            var methodName = methodEntry.Key;
+            var methodOptions = methodEntry.Value;
+            
+            var perMinute = methodOptions.RequestsPerMinute;
+            var perHour = methodOptions.RequestsPerHour;
+            var cooldownSeconds = methodOptions.CooldownSeconds;
             
             _methodLimits[methodName] = (perMinute, perHour, TimeSpan.FromSeconds(cooldownSeconds));
             _logger.LogDebug("Установлены специальные лимиты для метода {Method}: {PerMinute} запросов в минуту, {PerHour} запросов в час, охлаждение {Cooldown} сек.", 

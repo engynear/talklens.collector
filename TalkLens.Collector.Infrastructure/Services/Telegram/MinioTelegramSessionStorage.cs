@@ -1,11 +1,9 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using TalkLens.Collector.Domain.Interfaces;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -24,21 +22,25 @@ public class MinioTelegramSessionStorage : ITelegramSessionStorage
     private const string SessionFilePrefix = "telegram/sessions/";
     private const string UpdatesStatePrefix = "telegram/updates/";
 
-    public MinioTelegramSessionStorage(IConfiguration configuration, ILogger<MinioTelegramSessionStorage> logger)
+    public MinioTelegramSessionStorage(
+        IOptions<StorageOptions> storageOptions, 
+        ILogger<MinioTelegramSessionStorage> logger)
     {
         _logger = logger;
+        var options = storageOptions.Value;
         
         // Проверяем, нужно ли использовать удаленное хранилище
-        _useRemoteStorage = bool.Parse(configuration["Storage:UseRemoteStorage"] ?? "false");
+        _useRemoteStorage = options.UseRemoteStorage;
         // Проверяем, нужно ли пропускать сохранение в MinIO
-        _skipMinioSave = bool.Parse(configuration["Storage:SkipMinioSave"] ?? "false");
+        _skipMinioSave = options.SkipMinioSave;
         
-        var endpoint = configuration["Storage:Minio:Endpoint"] ?? "localhost:9000";
-        var accessKey = configuration["Storage:Minio:AccessKey"] ?? "minioadmin";
-        var secretKey = configuration["Storage:Minio:SecretKey"] ?? "minioadmin";
-        var withSSL = bool.Parse(configuration["Storage:Minio:WithSSL"] ?? "false");
+        var minioOptions = options.Minio;
+        var endpoint = minioOptions.Endpoint;
+        var accessKey = minioOptions.AccessKey;
+        var secretKey = minioOptions.SecretKey;
+        var withSSL = minioOptions.WithSSL;
         
-        _bucketName = configuration["Storage:Minio:BucketName"] ?? "talklens";
+        _bucketName = minioOptions.BucketName;
         
         // Создаем клиент MinIO только если используем удаленное хранилище
         if (_useRemoteStorage)
@@ -57,7 +59,7 @@ public class MinioTelegramSessionStorage : ITelegramSessionStorage
         }
         
         // Создаем временную директорию для кэширования файлов сессий
-        var tempDir = configuration["Storage:Minio:TempDirectory"] ?? "TelegramSessionCache";
+        var tempDir = minioOptions.TempDirectory;
         if (!Path.IsPathRooted(tempDir))
         {
             tempDir = Path.Combine(Path.GetTempPath(), tempDir);

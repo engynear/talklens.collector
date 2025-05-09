@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TalkLens.Collector.Domain.Interfaces;
+using TalkLens.Collector.Infrastructure.Configuration;
 using TalkLens.Collector.Infrastructure.Messengers.Telegram;
 using WTelegram;
 
@@ -16,6 +18,7 @@ public class TelegramSessionManager
     private readonly IConfiguration _configuration;
     private readonly TelegramRateLimiter _rateLimiter;
     private readonly TelegramApiCache _apiCache;
+    private readonly TelegramOptions _telegramOptions;
     
     private readonly string _apiId;
     private readonly string _apiHash;
@@ -25,17 +28,19 @@ public class TelegramSessionManager
         IConfiguration configuration,
         TelegramRateLimiter rateLimiter,
         TelegramApiCache apiCache,
+        IOptions<TelegramOptions> telegramOptions,
         ILogger<TelegramSessionManager> logger)
     {
         _sessionStorage = sessionStorage;
         _configuration = configuration;
         _rateLimiter = rateLimiter;
         _apiCache = apiCache;
+        _telegramOptions = telegramOptions.Value;
         _logger = logger;
         
         // Загружаем настройки API из конфигурации
-        _apiId = configuration["Telegram:ApiId"] ?? "23252333";
-        _apiHash = configuration["Telegram:ApiHash"] ?? "2bfce46015419239292eeaed12562231";
+        _apiId = _telegramOptions.ApiId.ToString();
+        _apiHash = _telegramOptions.ApiHash;
         
         _logger.LogInformation("TelegramSessionManager инициализирован с API ID: {ApiId}", _apiId);
     }
@@ -102,7 +107,9 @@ public class TelegramSessionManager
                 updatesFilePath, 
                 _rateLimiter,
                 _apiCache,
-                phone);
+                phone,
+                _apiId,
+                _apiHash);
                 
             _logger.LogDebug("Создана сессия Telegram для пользователя {UserId}, сессия {SessionId}", userId, sessionId);
             

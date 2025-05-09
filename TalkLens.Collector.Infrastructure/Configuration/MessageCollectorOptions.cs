@@ -21,4 +21,9 @@ public class MessageCollectorOptions
     /// (при достижении этого порога сообщения будут сохранены принудительно)
     /// </summary>
     public int MaxQueueSizePerSession { get; set; } = 1000;
+    
+    /// <summary>
+    /// Размер пакета для обработки сообщений
+    /// </summary>
+    public int BatchSize { get; set; } = 1000;
 } 

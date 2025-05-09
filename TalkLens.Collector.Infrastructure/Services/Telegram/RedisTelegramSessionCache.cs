@@ -1,14 +1,11 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
-using System.Linq;
-using System.Collections.Generic;
 using TalkLens.Collector.Infrastructure.Messengers.Telegram;
 using TalkLens.Collector.Infrastructure.Cache;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -30,7 +27,7 @@ public class RedisTelegramSessionCache
     
     public RedisTelegramSessionCache(
         IConnectionMultiplexer redis, 
-        IConfiguration configuration,
+        IOptions<RedisOptions> redisOptions,
         ILogger<RedisTelegramSessionCache> logger,
         IServiceProvider serviceProvider)
     {
@@ -39,16 +36,13 @@ public class RedisTelegramSessionCache
         _logger = logger;
         _serviceProvider = serviceProvider;
         
-        // Парсим настройки времени жизни кэша (часы)
-        int sessionExpiryHours = 1; // значение по умолчанию - 1 час
-        if (int.TryParse(configuration["Redis:SessionExpiryHours"], out int configHours))
-        {
-            sessionExpiryHours = configHours;
-        }
-        _defaultExpiry = TimeSpan.FromHours(sessionExpiryHours);
+        var options = redisOptions.Value;
+        
+        // Получаем время жизни кэша в часах
+        _defaultExpiry = TimeSpan.FromHours(options.SessionExpirationHours);
         
         // Получаем префикс ключей
-        _keyPrefix = configuration["Redis:KeyPrefix"] ?? "telegram:session:";
+        _keyPrefix = options.KeyPrefix;
         
         _logger.LogInformation("RedisTelegramSessionCache инициализирован с временем жизни {Expiry}", _defaultExpiry);
     }

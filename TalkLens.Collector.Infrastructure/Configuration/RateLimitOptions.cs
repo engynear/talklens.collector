@@ -1,5 +1,3 @@
-using System;
-
 namespace TalkLens.Collector.Infrastructure.Configuration;
 
 /// <summary>
@@ -8,12 +6,27 @@ namespace TalkLens.Collector.Infrastructure.Configuration;
 public class RateLimitOptions
 {
     /// <summary>
-    /// Максимальное количество запросов в указанный период времени
+    /// Имя секции в конфигурации
     /// </summary>
-    public int MaxRequests { get; set; } = 30;
+    public const string SectionName = "Telegram:RateLimit";
     
     /// <summary>
-    /// Период времени для ограничения запросов
+    /// Количество запросов в минуту
     /// </summary>
-    public TimeSpan TimeWindow { get; set; } = TimeSpan.FromMinutes(1);
+    public int RequestsPerMinute { get; set; } = 20;
+    
+    /// <summary>
+    /// Количество запросов в час
+    /// </summary>
+    public int RequestsPerHour { get; set; } = 300;
+    
+    /// <summary>
+    /// Время ожидания при ограничении запросов (в секундах)
+    /// </summary>
+    public int CooldownSeconds { get; set; } = 3;
+    
+    /// <summary>
+    /// Настройки ограничения для конкретных методов
+    /// </summary>
+    public Dictionary<string, MethodRateLimitOptions> MethodLimits { get; set; } = new();
 } 

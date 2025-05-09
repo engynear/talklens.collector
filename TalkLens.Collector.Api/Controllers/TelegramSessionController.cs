@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using TalkLens.Collector.Api.Models.Session;
 using TalkLens.Collector.Api.Models.Telegram;
 using TalkLens.Collector.Domain.Interfaces;
 using TalkLens.Collector.Domain.Models.Telegram;
-using TalkLens.Collector.Infrastructure.Messengers.Telegram;
 
 namespace TalkLens.Collector.Api.Controllers;
 

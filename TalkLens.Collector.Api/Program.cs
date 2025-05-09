@@ -1,23 +1,30 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 using System.Text;
 using TalkLens.Collector.Domain.Interfaces;
-using TalkLens.Collector.Infrastructure.Configuration;
 using TalkLens.Collector.Infrastructure.Database;
 using TalkLens.Collector.Infrastructure.Repositories;
-using TalkLens.Collector.Infrastructure.Services;
 using TalkLens.Collector.Infrastructure.Services.Telegram;
+using TalkLens.Collector.Infrastructure.Extensions;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Добавляем сервисы в контейнер
+// Регистрация опций для конфигурации
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
+builder.Services.Configure<MessageCollectorOptions>(builder.Configuration.GetSection(MessageCollectorOptions.SectionName));
+builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection(TelegramOptions.SectionName));
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
+// Регистрация вложенных опций
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+builder.Services.Configure<TelegramCacheOptions>(builder.Configuration.GetSection(TelegramCacheOptions.SectionName));
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Настраиваем Swagger с поддержкой JWT
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
@@ -26,8 +33,7 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "API для сбора и анализа данных из мессенджеров"
     });
-
-    // Добавляем определение безопасности для JWT Bearer
+    
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -55,38 +61,32 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Настройка подключения к БД
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
-// Удаляем старую регистрацию:
-// builder.Services.AddScoped<TalkLensDbContext>(sp => new TalkLensDbContext(connectionString));
-// builder.Services.AddSingleton<Func<TalkLensDbContext>>(sp =>
-// {
-//     var provider = sp;
-//     return () => provider.GetRequiredService<TalkLensDbContext>();
-// });
 
-// Оставляем только фабрику:
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 builder.Services.AddTransient<Func<TalkLensDbContext>>(_ =>
     () => new TalkLensDbContext(connectionString));
 
 // Настройка JWT аутентификации
-builder.Services.AddAuthentication(options =>
+builder.Services
+    .AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-.AddJwtBearer(options =>
+    .AddJwtBearer(options =>
 {
+    var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>();
+    
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ValidIssuer = jwtOptions?.Issuer,
+        ValidAudience = jwtOptions?.Audience,
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"])),
+            Encoding.UTF8.GetBytes(jwtOptions?.SecretKey ?? string.Empty)),
         ClockSkew = TimeSpan.Zero // Убираем стандартный запас в 5 минут
     };
 
@@ -96,7 +96,7 @@ builder.Services.AddAuthentication(options =>
         {
             if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
             {
-                context.Response.Headers.Add("Token-Expired", "true");
+                context.Response.Headers.Append("Token-Expired", "true");
             }
             return Task.CompletedTask;
         }
@@ -104,19 +104,13 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
-
-// Добавляем SignalR
 builder.Services.AddSignalR();
-
-// Регистрируем Redis ConnectionMultiplexer как синглтон
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
-    string connectionString = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
-    int dbNumber = 0;
-    if (int.TryParse(builder.Configuration["Redis:DbNumber"], out int configDbNumber))
-    {
-        dbNumber = configDbNumber;
-    }
+    var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>();
+    
+    var connectionString = redisOptions?.ConnectionString ?? "localhost:6379";
+    var dbNumber = 0;
     
     var options = new ConfigurationOptions
     {
@@ -129,17 +123,13 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 
 // Регистрация зависимостей для кэширования
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<RedisTelegramSessionCache>(sp => 
-    new RedisTelegramSessionCache(
-        sp.GetRequiredService<IConnectionMultiplexer>(),
-        builder.Configuration,
-        sp.GetRequiredService<ILogger<RedisTelegramSessionCache>>(),
-        sp
-    ));
+builder.Services.AddSingleton<RedisTelegramSessionCache>();
 builder.Services.AddSingleton<RedisTelegramApiCache>();
 
 // Регистрация хранилища сессий Telegram
-var storageProvider = builder.Configuration["Storage:Provider"] ?? "Minio";
+var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>();
+var storageProvider = storageOptions?.Provider ?? "Minio";
+
 if (storageProvider.Equals("Minio", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<ITelegramSessionStorage, MinioTelegramSessionStorage>();
@@ -183,17 +173,22 @@ builder.Services.AddScoped<ISessionService>(provider =>
 // Регистрация сервиса мониторинга обновлений Telegram
 builder.Services.AddHostedService<TelegramUpdateMonitorService>();
 
-// Регистрация сервиса очереди сообщений в Redis
-builder.Services.AddSingleton<RedisMessageQueueService>();
-builder.Services.AddHostedService(provider => provider.GetRequiredService<RedisMessageQueueService>());
-
 // Регистрация репозиториев
 builder.Services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
 builder.Services.AddScoped<ITelegramSubscriptionRepository, TelegramSubscriptionRepository>();
 builder.Services.AddScoped<ITelegramMessageRepository, TelegramMessageRepository>();
+builder.Services.AddScoped<IChatMetricsHistoryRepository, ChatMetricsHistoryRepository>();
+builder.Services.AddScoped<ITelegramUserRecommendationRepository, TelegramUserRecommendationRepository>();
 
 // Регистрация сервисов метрик
-builder.Services.AddScoped<IChatMetricsService, ChatMetricsService>();
+builder.Services.AddScoped<IChatMetricsService, TelegramChatMetricsService>();
+
+// Регистрация сервиса сбора сообщений
+builder.Services.AddSingleton<TelegramMessageCollectorService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<TelegramMessageCollectorService>());
+
+// Регистрация Kafka сервиса
+builder.Services.AddKafka(builder.Configuration);
 
 var app = builder.Build();
 
@@ -204,6 +199,7 @@ using (var scope = app.Services.CreateScope())
     {
         Console.WriteLine("[INFO] Начинаем инициализацию сессий из Redis...");
         var redisCache = scope.ServiceProvider.GetRequiredService<RedisTelegramSessionCache>();
+        var telegramSessionService = scope.ServiceProvider.GetRequiredService<ITelegramSessionService>();
         
         // Запускаем инициализацию сессий с таймаутом
         var initTask = Task.Run(async () => 
@@ -213,20 +209,24 @@ using (var scope = app.Services.CreateScope())
                 Console.WriteLine("[INFO] Запущена задача инициализации сессий из Redis");
                 await redisCache.InitializeSessionsFromRedis();
                 Console.WriteLine("[INFO] Сессии Telegram успешно инициализированы из Redis");
+                
+                // Восстанавливаем все активные сессии из базы данных
+                Console.WriteLine("[INFO] Начинаем восстановление всех активных сессий из базы данных...");
+                var restoredCount = await telegramSessionService.RestoreAllActiveSessionsAsync(CancellationToken.None);
+                Console.WriteLine($"[INFO] Восстановлено {restoredCount} активных сессий из базы данных");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Ошибка при инициализации сессий из Redis: {ex.Message}");
+                Console.WriteLine($"[ERROR] Ошибка при инициализации сессий: {ex.Message}");
                 Console.WriteLine($"[ERROR] Стек вызовов: {ex.StackTrace}");
             }
         });
         
-        // Ждем завершения задачи с таймаутом
-        bool completed = initTask.Wait(TimeSpan.FromSeconds(60)); // Увеличиваем таймаут до 60 секунд
+        var completed = initTask.Wait(TimeSpan.FromSeconds(60));
         
         if (!completed)
         {
-            Console.WriteLine("[WARNING] Превышено время ожидания при инициализации сессий из Redis. Продолжаем запуск приложения.");
+            Console.WriteLine("[WARNING] Превышено время ожидания при инициализации сессий. Продолжаем запуск приложения.");
         }
     }
     catch (Exception ex)

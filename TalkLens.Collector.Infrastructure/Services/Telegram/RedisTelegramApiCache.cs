@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using TalkLens.Collector.Infrastructure.Configuration;
 
 namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
@@ -20,29 +22,29 @@ public class RedisTelegramApiCache
 
     public RedisTelegramApiCache(
         IConnectionMultiplexer redis, 
-        IConfiguration configuration, 
+        IOptions<TelegramOptions> telegramOptions,
+        IOptions<RedisOptions> redisOptions,
+        IConfiguration configuration,
         ILogger<RedisTelegramApiCache> logger)
     {
         _redis = redis;
         _db = redis.GetDatabase();
         _logger = logger;
         
+        // Получаем настройки из опций
+        var cacheOptions = telegramOptions.Value.Cache ?? new TelegramCacheOptions();
+        
         // Получаем настройки времени жизни кэша
-        int defaultExpirationMinutes = 10; // значение по умолчанию - 10 минут
-        if (int.TryParse(configuration["Telegram:Cache:DefaultExpirationMinutes"], out int configMinutes))
-        {
-            defaultExpirationMinutes = configMinutes;
-        }
-        _defaultExpiration = TimeSpan.FromMinutes(defaultExpirationMinutes);
+        _defaultExpiration = TimeSpan.FromMinutes(cacheOptions.DefaultExpirationMinutes);
         
         // Получаем префикс ключей
-        _keyPrefix = configuration["Redis:KeyPrefix"] ?? "telegram:api:";
+        _keyPrefix = redisOptions.Value.KeyPrefix;
         
         // Загружаем специальные настройки для методов
         InitializeMethodExpirations(configuration);
         
         _logger.LogInformation("RedisTelegramApiCache инициализирован. Время жизни кэша по умолчанию: {Expiration} минут", 
-            defaultExpirationMinutes);
+            cacheOptions.DefaultExpirationMinutes);
     }
     
     private void InitializeMethodExpirations(IConfiguration configuration)

@@ -1,15 +1,10 @@
-using Microsoft.Extensions.Caching.Memory;
 using TalkLens.Collector.Domain.Enums.Telegram;
 using TalkLens.Collector.Domain.Interfaces;
-using TalkLens.Collector.Domain.Models.Telegram;
-using TalkLens.Collector.Infrastructure.Database;
-using TalkLens.Collector.Infrastructure.Messengers.Telegram;
-using TalkLens.Collector.Infrastructure.Services.Telegram;
-using TL;
-using System.Collections.Concurrent;
 using TalkLens.Collector.Domain.Models;
+using TalkLens.Collector.Domain.Models.Telegram;
+using TalkLens.Collector.Infrastructure.Messengers.Telegram;
 
-namespace TalkLens.Collector.Infrastructure.Services;
+namespace TalkLens.Collector.Infrastructure.Services.Telegram;
 
 public class TelegramSessionService : ITelegramSessionService
 {
@@ -36,7 +31,7 @@ public class TelegramSessionService : ITelegramSessionService
         Console.WriteLine($"[DEBUG] Trying to restore session. UserId: {userId}, SessionId: {sessionId}");
         
         // Проверяем глобальный кэш через Redis
-        var globalSession = _redisCache.GetSession(userId, sessionId);
+        var globalSession = await _redisCache.GetSessionAsync(userId, sessionId);
         Console.WriteLine($"[DEBUG] Redis cache check: {(globalSession != null ? "Found" : "Not found")}");
         
         if (globalSession != null)
@@ -75,11 +70,13 @@ public class TelegramSessionService : ITelegramSessionService
         }
 
         // Проверяем БД если сессия не найдена в Redis
+        Console.WriteLine("[DEBUG] Checking database for session...");
         var dbSession = await _sessionRepository.GetActiveSessionAsync(userId, sessionId, cancellationToken);
         Console.WriteLine($"[DEBUG] DB session check: {(dbSession != null ? "Found" : "Not found")}");
         
         if (dbSession == null)
         {
+            Console.WriteLine("[DEBUG] Session not found in database");
             return null;
         }
 
@@ -89,10 +86,12 @@ public class TelegramSessionService : ITelegramSessionService
             
             // Создаем сессию с помощью менеджера сессий
             var session = await _sessionManager.CreateSessionAsync(userId, sessionId, dbSession.PhoneNumber);
+            Console.WriteLine("[DEBUG] Session created from DB data");
             
             try 
             {
                 // Для сессий из БД проверяем авторизацию
+                Console.WriteLine("[DEBUG] Validating session from DB...");
                 if (!await session.ValidateSessionAsync())
                 {
                     Console.WriteLine("[DEBUG] New session from DB is invalid");
@@ -104,6 +103,7 @@ public class TelegramSessionService : ITelegramSessionService
                 Console.WriteLine("[DEBUG] New session from DB is valid, adding to Redis cache");
                 // Если сессия валидна, помещаем её в Redis кэш
                 _redisCache.SetSession(userId, sessionId, session);
+                Console.WriteLine("[DEBUG] Session successfully added to Redis cache");
                 return session;
             }
             catch (ObjectDisposedException)
@@ -660,5 +660,53 @@ public class TelegramSessionService : ITelegramSessionService
         CancellationToken cancellationToken)
     {
         return await _subscriptionRepository.ExistsSubscriptionAsync(userId, sessionId, interlocutorId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Восстанавливает все активные сессии из базы данных
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Количество успешно восстановленных сессий</returns>
+    public async Task<int> RestoreAllActiveSessionsAsync(CancellationToken cancellationToken)
+    {
+        Console.WriteLine("[DEBUG] Начинаем восстановление всех активных сессий из базы данных");
+        
+        try
+        {
+            // Получаем все активные сессии из базы данных
+            var sessions = await _sessionRepository.GetAllActiveSessionsAsync(cancellationToken);
+            Console.WriteLine($"[DEBUG] Найдено {sessions.Count} активных сессий в базе данных");
+            
+            int restoredCount = 0;
+            foreach (var session in sessions)
+            {
+                try
+                {
+                    // Пытаемся восстановить сессию
+                    var restoredSession = await GetOrRestoreSessionAsync(session.UserId, session.SessionId, cancellationToken);
+                    if (restoredSession != null)
+                    {
+                        Console.WriteLine($"[DEBUG] Сессия {session.SessionId} успешно восстановлена");
+                        restoredCount++;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[DEBUG] Не удалось восстановить сессию {session.SessionId}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR] Ошибка при восстановлении сессии {session.SessionId}: {ex.Message}");
+                }
+            }
+            
+            Console.WriteLine($"[DEBUG] Восстановлено {restoredCount} из {sessions.Count} сессий");
+            return restoredCount;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Ошибка при восстановлении сессий: {ex.Message}");
+            return 0;
+        }
     }
 }

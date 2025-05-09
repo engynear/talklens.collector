@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using TalkLens.Collector.Api.Models.Telegram;
 using TalkLens.Collector.Domain.Interfaces;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace TalkLens.Collector.Api.Controllers;
 
 [Route("metrics/telegram")]
 [ApiController]
-public class ChatMetricsController(IChatMetricsService chatMetricsService) : BaseApiController
+public class ChatMetricsController(
+    IChatMetricsService chatMetricsService,
+    ITelegramUserRecommendationRepository recommendationRepository) : BaseApiController
 {
     /// <summary>
     /// Получает метрики чата с конкретным собеседником в рамках определенной сессии
@@ -61,6 +61,39 @@ public class ChatMetricsController(IChatMetricsService chatMetricsService) : Bas
             }
         };
 
+        return Ok(response);
+    }
+    
+    /// <summary>
+    /// Получает последнюю рекомендацию для пользователя в рамках определенной сессии и собеседника
+    /// </summary>
+    /// <param name="sessionId">Идентификатор сессии Telegram</param>
+    /// <param name="interlocutorId">Идентификатор собеседника в Telegram</param>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Последняя рекомендация или 404, если рекомендаций нет</returns>
+    [HttpGet("recommendations/{sessionId}/{interlocutorId}")]
+    public async Task<ActionResult<TelegramUserRecommendationResponse>> GetRecommendation(
+        [FromRoute] string sessionId,
+        [FromRoute] long interlocutorId,
+        CancellationToken cancellationToken)
+    {
+        var recommendation = await recommendationRepository.GetLastRecommendationAsync(
+            sessionId,
+            interlocutorId,
+            cancellationToken);
+            
+        if (recommendation == null)
+        {
+            return NotFound(new { message = "Рекомендаций не найдено" });
+        }
+        
+        var response = new TelegramUserRecommendationResponse
+        {
+            Id = recommendation.Id,
+            RecommendationText = recommendation.RecommendationText,
+            CreatedAt = recommendation.CreatedAt
+        };
+        
         return Ok(response);
     }
 } 

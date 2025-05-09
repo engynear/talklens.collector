@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.415.18" />
+    <PackageReference Include="ClickHouse.Client" Version="7.13.2" />
     <PackageReference Include="Confluent.Kafka" Version="2.10.0" />
     <PackageReference Include="linq2db" Version="5.4.1" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />

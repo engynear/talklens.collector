@@ -1,5 +1,3 @@
-using System;
-
 namespace TalkLens.Collector.Infrastructure.Configuration;
 
 /// <summary>
@@ -7,6 +5,11 @@ namespace TalkLens.Collector.Infrastructure.Configuration;
 /// </summary>
 public class TelegramOptions
 {
+    /// <summary>
+    /// Имя секции в конфигурации приложения
+    /// </summary>
+    public const string SectionName = "Telegram";
+    
     /// <summary>
     /// API ID приложения Telegram
     /// </summary>
@@ -26,6 +29,11 @@ public class TelegramOptions
     /// Настройки ограничения запросов
     /// </summary>
     public RateLimitOptions RateLimit { get; set; } = new();
+    
+    /// <summary>
+    /// Настройки кэширования
+    /// </summary>
+    public TelegramCacheOptions Cache { get; set; } = new();
     
     /// <summary>
     /// Настройки Redis для кэширования

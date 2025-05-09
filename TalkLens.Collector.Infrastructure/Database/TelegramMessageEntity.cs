@@ -26,4 +26,8 @@ public class TelegramMessageEntity
     
     [Column("message_time")]
     public DateTime MessageTime { get; set; }
+    
+    // Это поле не будет сохраняться в базу данных, так как не имеет атрибут Column
+    // Оно будет использоваться только для передачи в Kafka
+    public string? MessageText { get; set; }
 }

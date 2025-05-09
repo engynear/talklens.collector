@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using TalkLens.Collector.Infrastructure.Configuration;
 using TalkLens.Collector.Infrastructure.Messengers.Telegram;
 
 namespace TalkLens.Collector.Infrastructure.Cache;
@@ -19,19 +20,14 @@ public class TelegramSessionCacheManager
     
     public TelegramSessionCacheManager(
         ICacheProvider<TelegramSessionInfo> cacheProvider,
-        IConfiguration configuration,
+        IOptions<RedisOptions> redisOptions,
         ILogger<TelegramSessionCacheManager> logger)
     {
         _cacheProvider = cacheProvider;
         _logger = logger;
         
-        // Получаем время жизни сессии из конфигурации
-        int expiryHours = 1; // По умолчанию 1 час
-        if (int.TryParse(configuration["Redis:SessionExpiryHours"], out var configHours))
-        {
-            expiryHours = configHours;
-        }
-        _defaultExpiry = TimeSpan.FromHours(expiryHours);
+        // Получаем время жизни сессии из опций
+        _defaultExpiry = TimeSpan.FromHours(redisOptions.Value.SessionExpirationHours);
         
         _logger.LogInformation("TelegramSessionCacheManager инициализирован с временем жизни сессии {DefaultExpiry}", _defaultExpiry);
     }

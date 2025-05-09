@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace TalkLens.Collector.Infrastructure.Storage.Abstractions
 {
     /// <summary>

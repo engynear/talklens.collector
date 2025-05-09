@@ -13,6 +13,13 @@ public interface ITelegramSessionRepository
     Task<List<TelegramSessionData>> GetActiveSessionsAsync(string userId, CancellationToken cancellationToken);
     
     /// <summary>
+    /// Получает список всех активных сессий для всех пользователей
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Список активных сессий</returns>
+    Task<List<TelegramSessionData>> GetAllActiveSessionsAsync(CancellationToken cancellationToken);
+    
+    /// <summary>
     /// Проверяет существование активной сессии с указанным номером телефона
     /// </summary>
     /// <param name="phoneNumber">Номер телефона</param>

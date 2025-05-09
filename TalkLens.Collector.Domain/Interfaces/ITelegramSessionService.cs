@@ -1,5 +1,3 @@
-using TalkLens.Collector.Domain.Enums.Telegram;
-using TalkLens.Collector.Domain.Models;
 using TalkLens.Collector.Domain.Models.Telegram;
 
 namespace TalkLens.Collector.Domain.Interfaces;
@@ -27,11 +25,6 @@ public interface ITelegramSessionService : ISessionService
         string password,
         CancellationToken cancellationToken);
     
-    // Task<TelegramLoginResult> GetSessionStatusAsync(
-    //     string userId,
-    //     string sessionId, 
-    //     CancellationToken cancellationToken);
-
     /// <summary>
     /// Получает список активных сессий Telegram пользователя
     /// </summary>
@@ -154,4 +147,11 @@ public interface ITelegramSessionService : ISessionService
         string sessionId,
         long interlocutorId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Восстанавливает все активные сессии из базы данных
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены</param>
+    /// <returns>Количество успешно восстановленных сессий</returns>
+    Task<int> RestoreAllActiveSessionsAsync(CancellationToken cancellationToken);
 }

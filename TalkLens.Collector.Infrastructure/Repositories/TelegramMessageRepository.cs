@@ -197,7 +197,8 @@ public class TelegramMessageRepository : ITelegramMessageRepository
             TelegramUserId = entity.TelegramUserId,
             TelegramInterlocutorId = entity.TelegramInterlocutorId,
             SenderId = entity.SenderId,
-            MessageTime = entity.MessageTime
+            MessageTime = entity.MessageTime,
+            // MessageText не маппируется из базы данных, так как там его нет
         };
     }
 
@@ -212,6 +213,7 @@ public class TelegramMessageRepository : ITelegramMessageRepository
             TelegramInterlocutorId = data.TelegramInterlocutorId,
             SenderId = data.SenderId,
             MessageTime = data.MessageTime
+            // MessageText не маппируется в базу данных, игнорируем это поле
         };
     }
 } 
