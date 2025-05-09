@@ -433,7 +433,7 @@ public class TelegramSession : IDisposable
                 return contacts;
             },
             forceRefresh,
-            new object[] { "all" },
+            new object[] { _userId, _sessionId, "all" },
             cancellationToken);
     }
 
@@ -493,7 +493,7 @@ public class TelegramSession : IDisposable
                     .ToList();
             },
             forceRefresh,
-            new object[] { "recent" },
+            new object[] { _userId, _sessionId, "recent" },
             cancellationToken);
     }
 
